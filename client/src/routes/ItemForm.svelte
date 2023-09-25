@@ -124,7 +124,6 @@
 </script>
 
 <div class="container">
-
     {#if error}
         <Error message={error} />
     {/if}
@@ -145,7 +144,8 @@
             </button>
         </div>
     </div>
-    <form on:submit|preventDefault={handleSubmit}  class="needs-validation" novalidate>
+    <form on:submit|preventDefault={handleSubmit}  
+        class="needs-validation" novalidate>
     <div class="row">
         <div class="col">
             <label for="date" class="form-label">
@@ -218,7 +218,6 @@
         </div>  
     </div>
 </form>
-
 </div>
 
 

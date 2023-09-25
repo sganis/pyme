@@ -3,8 +3,6 @@
 	const dispatch = createEventDispatcher()
 
     export let title;
-    export let showCreate;
-    export let refresh;
     export let table;
     export let sortCol;
     export let sortDesc;
@@ -17,6 +15,12 @@
     }
     const sort = (col) => {
         dispatch('sort', col);
+    }
+    const refresh = () => {
+        dispatch('refresh');
+    }
+    const showCreate = () => {
+        dispatch('showCreate');
     }
     const showModify = (o) => {
         dispatch('showModify', o);
@@ -37,7 +41,7 @@
 <br>
 <div class="d-flex justify-content-center gap-2">
     <input class="form-control" 
-            type="text" placeholder="Filter..."
+            type="text" placeholder="Search..."
             bind:value={searchText}
             on:keyup={searchLater} />  
 
@@ -50,7 +54,11 @@
     
     <button
         class="btn btn-success  btn-width" on:click={showCreate}>
-        Create
+        New
+    </button>
+    <button class="btn btn-danger" type="button" disabled
+        on:click={showRemove}>
+        <i class="bi-trash3"/>
     </button>
 </div>
 

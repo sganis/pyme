@@ -40,7 +40,7 @@
         await manager.search();
         error = manager.error;
         items = manager.result;
-	});
+	  });
 
     const refresh = async () => {
         await manager.search();
@@ -155,10 +155,10 @@
     {table} 
     {sortCol} 
     {sortDesc} 
-    {showCreate} 
-    {refresh} 
-    on:searchLater={searchLater} 
+    on:refresh={refresh}
     on:sort={sort}
+    on:searchLater={searchLater} 
+    on:showCreate={showCreate}  
     on:showRemove={showRemove}  
     on:showModify={showModify} />
 

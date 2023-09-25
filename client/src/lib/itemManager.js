@@ -25,7 +25,7 @@ export default class ItemManager {
       });
       const j = await r.json();
 
-      console.log(j);
+      //console.log(j);
       if (r.status !== 200) {
         this.error = j.detail;
         apierror.set(this.error);
