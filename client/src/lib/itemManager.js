@@ -1,5 +1,5 @@
 import { get } from "svelte/store";
-import { working, state, apierror } from "../lib/store";
+import { working, state, apierror } from "./store";
 
 export default class ItemManager {
   constructor(url) {

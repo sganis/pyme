@@ -1,16 +1,20 @@
 <script>
-    import{_} from 'svelte-i18n';
-    import { link } from "svelte-spa-router";
     import { createEventDispatcher } from 'svelte';
+	const dispatch = createEventDispatcher()
 
-	const dispatch = createEventDispatcher();
-
+    export let title;
+    export let showCreate;
+    export let refresh;
     export let table;
     export let sortCol;
     export let sortDesc;
-    export let urlpath;
     export let items;
 
+    let searchText;
+
+    const searchLater = () => {
+        dispatch('searchLater', searchText);
+    }
     const sort = (col) => {
         dispatch('sort', col);
     }
@@ -22,6 +26,37 @@
     }
     
 </script>
+
+
+<div class="row bg-light border-bottom">
+    <div class="col-sm-6 h2">{title}</div>
+    <div class="col-sm-6">
+        
+    </div>
+</div>
+<br>
+<div class="d-flex justify-content-center gap-2">
+    <input class="form-control" 
+            type="text" placeholder="Filter..."
+            bind:value={searchText}
+            on:keyup={searchLater} />  
+
+    <button class="btn btn-light " 
+        on:click={refresh}>
+        <i class="bi-repeat"></i>          
+    </button>
+
+    <div class=""></div>   
+    
+    <button
+        class="btn btn-success  btn-width" on:click={showCreate}>
+        Create
+    </button>
+</div>
+
+
+<br>
+
 
 <div class="row">
     <div class="table-responsive">
@@ -42,10 +77,7 @@
             <tbody>
             {#each items as o, i}
             <tr>
-                <td><a href="/{urlpath}/{o[table.id_column]}" 
-                    use:link>{String(o.id).padStart(5, '0')}</a>
-                </td>
-                {#each table.columns.slice(1) as col}
+                {#each table.columns as col}
                 <td>{ o[col] || ""}</td>
                 {/each}
                 <td class="text-nowrap text-end">
@@ -65,7 +97,7 @@
     </div>
 </div>
 
-<div>{$_("total.items", {values: {count: items.length}})}</div>
+<div>Total: {items.length}</div>
 
 
 <style>

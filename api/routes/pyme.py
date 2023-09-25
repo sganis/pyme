@@ -16,7 +16,7 @@ def f(q: str=None, offset:int=0, limit:int=100,
     try:
         query = select(Pyme).where(Pyme.deleted == False)
         if q:
-            query = query.where(Pyme.customer.like(f'%{q.upper()()}%'))
+            query = query.where(Pyme.customer.ilike(f'%{q}%'))
         if sortcol:
             if not desc:
                 query = query.order_by(getattr(Pyme, sortcol))

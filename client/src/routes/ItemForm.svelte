@@ -9,7 +9,7 @@
     import * as yup from "yup";
     import { API_URL, working, state } from '../lib/store';
     import Error from '../lib/Error.svelte';
-    import ItemManager from '../lib/items';
+    import ItemManager from '../lib/itemManager';
 
 
     let url = `${API_URL}pyme/`
