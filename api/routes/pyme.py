@@ -1,6 +1,6 @@
 from fastapi import Depends, HTTPException, APIRouter
 from sqlmodel import Session, select, or_
-from api.models import Pyme
+from api.models import Pyme, User
 from api.db import get_session
 from api.dependencies import authenticate
 
@@ -16,7 +16,7 @@ def f(q: str=None, offset:int=0, limit:int=100,
     try:
         query = select(Pyme).where(Pyme.deleted == False)
         if q:
-            query = query.where(Pyme.customer.like(f'%{q.lower()}%'))
+            query = query.where(Pyme.customer.like(f'%{q.upper()()}%'))
         if sortcol:
             if not desc:
                 query = query.order_by(getattr(Pyme, sortcol))
@@ -43,7 +43,7 @@ def f(id: int, session: Session = Depends(get_session)):
 def f(obj: Pyme, session: Session = Depends(get_session)):
     try:        
         b = Pyme(date = obj.date,
-                customer = obj.customer,
+                customer = obj.customer.upper(),
                 product = obj.product,
                 quantity = obj.quantity,
                 price = obj.price,
@@ -85,3 +85,12 @@ def f(id: int, session: Session = Depends(get_session)):
     return obj_db
 
 
+@router.get("/customer/", response_model=list[str])
+def f(session: Session = Depends(get_session)):
+    try:
+        query = select(Pyme.customer.distinct()).where(Pyme.deleted == False)
+        items = session.exec(query).all()     
+        return items
+    except Exception as ex:
+        print(ex)
+        raise HTTPException(status_code=400, detail=f"Error in Db")

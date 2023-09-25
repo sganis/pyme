@@ -1,13 +1,14 @@
 <script>
+// @ts-nocheck
+
     import { onMount } from 'svelte';
     import { push, pop, querystring } from 'svelte-spa-router';
     import { DateInput } from 'date-picker-svelte'
-    import Select from 'svelte-select';
+    import AutoComplete from "simple-svelte-autocomplete"
     import dayjs from 'dayjs';
     import * as yup from "yup";
-    import { API_URL, working, state, apierror } from '../lib/store';
+    import { API_URL, working, state } from '../lib/store';
     import Error from '../lib/Error.svelte';
-    import CustomerItem from './CustomerItem.svelte';
     import ItemManager from '../lib/items';
 
 
@@ -16,9 +17,11 @@
     let errors = {};
     let isModify = false;
     let manager = null;
-
     let today = dayjs().toDate();
-    let customer = null;
+
+    let customers = [];
+    let currentCustomer;
+
 
     let item = {
         date: today,
@@ -36,7 +39,7 @@
             })
             .typeError("Invalid date")
             .required("Required"),
-        customer: yup.string().required("Required"),
+        customer: yup.string().required("Required"), 
         product: yup.string().required("Required"),
         quantity: yup.number().required("Required"),
         price: yup.number().required("Required"),    
@@ -48,46 +51,22 @@
         errors = {}
 	});
 
-    const customerChanged = () => {
-        item.user.id = customer.id;
-        console.log('errors before', errors);
-        Object.keys(customer).forEach((key, index) => {
-            if (key in item.user) {
-                if (item.user[key] !== customer[key]) {
-                    item.user[key] = customer[key];
-                    if ('user.'+key in errors) {
-                        delete errors["user."+key]
-                        errors = errors; // reactive
-                    }
-                }
-            }
-        });
-        console.log('errors after', errors);
-        
-    }
-
-    const handleChange = async () => {
-        errors = {}
-        try {
-			await schema.validate(item, { abortEarly: false });
-		}
-        catch (err) {
-			errors = extractErrors(err);
-		}
-    }
-
-
     const handleSubmit = async () => {
+        // console.log(currentCustomer);
+        item.customer = currentCustomer;
+        // if(!currentCustomer) {
+        //     return;
+        // }
 		try {
 			await schema.validate(item, { abortEarly: false });
 			errors = {};
             await save();
-            pop();
 		} catch (err) {
             errors = extractErrors(err);
             //console.log(errors);           
 		}
-	}
+
+    }
     const extractErrors = (err) => {
 		return err.inner.reduce((acc, err) => {
 			return { ...acc, [err.path]: err.message };
@@ -95,10 +74,12 @@
 	}
 
     const getCustomer = async (q) => {
-        if (q.length < 1)
-            return []
+        if (q.length < 1){
+            customers = [];
+            return customers;
+        }
         try {
-            const r = await fetch(`${url}?q=${q}&sortcol=customer`, {
+            const r = await fetch(`${API_URL}customer/`, {
                 headers: {
                     Authorization: 'Bearer ' + $state.token
                 }
@@ -106,13 +87,15 @@
             const js = await r.json();
             if (r.status == 200) {
                 console.log(js)
-                return js
+                customers = js
+                return customers;
             } 
         }
         catch (err) {
             console.log(err)
         }
-        return []
+        customers = []
+        return customers;
     } 
 
     const save = async () => {
@@ -131,7 +114,13 @@
         error = manager.error;
     }
 
-    
+    const handleCreate = (username) => {
+        console.log('adding ', username);
+        customers.unshift(username);
+        customers = customers;
+        return username;
+    }
+
 </script>
 
 <div class="container">
@@ -142,11 +131,26 @@
     {#if Object.keys(errors).length > 0}
         <Error message={`Check errors: [${Object.keys(errors).toString()}]`} />
     {/if}
-
+    <div class="row text-end">
+        <div class="col">
+            <button class="btn btn-light" 
+                on:click={()=>push('/')}
+                disabled={$working}>
+                Cancel
+            </button>
+            <button class="btn btn-success"
+                on:click={handleSubmit}
+                disabled={$working}>
+                Add Item
+            </button>
+        </div>
+    </div>
     <form on:submit|preventDefault={handleSubmit}  class="needs-validation" novalidate>
     <div class="row">
         <div class="col">
-            <label for="date" class="form-label">Date</label>
+            <label for="date" class="form-label">
+                Date
+            </label>
             <DateInput
                 bind:value={item.date} 
                 closeOnSelection={true}
@@ -158,42 +162,27 @@
             {#if errors.date}<small class="error">{errors.date}</small>{/if}
 
         </div>
-    </div>
-   <!-- customer  -->
-   <div class="row">
-       <div class="col">
-           <label for="customer" class="form-label">Customer</label>                    
-           <Select 
-               loadOptions={getCustomer} 
-               itemId="id"
-               bind:value={item.customer}
-               on:change={customerChanged}
-               hideEmptyState={true}
-               placeholder="Search..."
-               disabled={$working}>
-               <div class="customer" slot="item" let:item let:index>
-                   <CustomerItem {item} />
-               </div>
-               <div class="customer" slot="selection" let:selection>
-                   <CustomerItem item={selection} />
-               </div>
-           </Select>
-           {#if !customer}<small class="error">New customer</small>{/if}
+        <div class="col">
+            <label for="customer" class="form-label">
+                Customer
+            </label>                    
+            <br>
+            <AutoComplete
+                inputClassName="form-control"
+                searchFunction={getCustomer}
+                delay="200"
+                bind:selectedItem={item.customer}
+                bind:text={currentCustomer}
+                create={true}
+                createText={"Item doesn't exist, create one?"} 
+                onCreate={handleCreate}         />
+                <br>                
+            {#if errors.customer}<small class="error">{errors.customer}</small>{/if}
+           
        </div>
    </div>
    <div class="row">
-       <div class="col-sm-6">
-           <label for="name" class="form-label">Name</label>
-           <input type="text" class="form-control" id="name"
-               disabled={$working}
-               on:change={handleChange}
-               bind:value={item.customer}>
-           {#if errors.hasOwnProperty("user.name")}<small class="error">{errors["user.name"]}</small>{/if}
-       </div>
-    </div>  
-    <div class="row">
         <div class="col">
-
             <label for="id" class="form-label text-nowrap">Product</label>
             <select  disabled={$working}
                 class="form-select"
@@ -228,26 +217,6 @@
             {#if errors.price}<small class="error">{errors.price}</small>{/if}
         </div>  
     </div>
-
-
-
-    <div class="row text-end">
-        <div class="col">
-            <button class="btn btn-light" 
-                on:click={()=>pop()}
-                disabled={$working}>
-                Cancel
-            </button>
-            <button class="btn btn-success"
-                on:click={handleSubmit}
-                disabled={$working}>
-                Add Item
-            </button>
-        </div>
-    </div>
- 
-
-
 </form>
 
 </div>
