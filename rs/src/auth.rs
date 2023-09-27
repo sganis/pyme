@@ -1,99 +1,119 @@
-// use std::sync::Arc;
+use jsonwebtoken::{decode, DecodingKey, EncodingKey, Validation};
+use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::fmt::Display;
+use axum::{
+    async_trait,
+    extract::FromRequestParts,
+    response::{IntoResponse, Response},
+    Json, RequestPartsExt,
+};
+use axum::http::{
+    request::Parts, 
+    StatusCode, 
+};
+use axum_extra::{
+    headers::{authorization::Bearer, Authorization},
+    TypedHeader,
+};
 
-// use axum::{
-//     extract::State,
-//     http::{header, Request, StatusCode},
-//     middleware::Next,
-//     response::IntoResponse,
-//     Json,
-// };
+pub static KEYS: Lazy<Keys> = Lazy::new(|| {
+    let secret = std::env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+    Keys::new(secret.as_bytes())
+});
 
-// use axum_extra::extract::cookie::CookieJar;
-// use jsonwebtoken::{decode, DecodingKey, Validation};
-// use serde::Serialize;
 
-// use crate::{
-//     model::{TokenClaims, User},
-//     AppState,
-// };
 
-// #[derive(Debug, Serialize)]
-// pub struct ErrorResponse {
-//     pub status: &'static str,
-//     pub message: String,
-// }
+impl Display for Claims {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "username: {}", self.sub)
+    }
+}
 
-// pub async fn auth<B>(
-//     cookie_jar: CookieJar,
-//     State(data): State<Arc<AppState>>,
-//     mut req: Request<B>,
-//     next: Next<B>,
-// ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-//     let token = cookie_jar
-//         .get("token")
-//         .map(|cookie| cookie.value().to_string())
-//         .or_else(|| {
-//             req.headers()
-//                 .get(header::AUTHORIZATION)
-//                 .and_then(|auth_header| auth_header.to_str().ok())
-//                 .and_then(|auth_value| {
-//                     if auth_value.starts_with("Bearer ") {
-//                         Some(auth_value[7..].to_owned())
-//                     } else {
-//                         None
-//                     }
-//                 })
-//         });
+impl AuthBody {
+    pub fn new(access_token: String, username: String) -> Self {
+        Self {
+            access_token,
+            token_type: "Bearer".to_string(),
+            username,
+        }
+    }
+}
 
-//     let token = token.ok_or_else(|| {
-//         let json_error = ErrorResponse {
-//             status: "fail",
-//             message: "You are not logged in, please provide token".to_string(),
-//         };
-//         (StatusCode::UNAUTHORIZED, Json(json_error))
-//     })?;
+#[async_trait]
+impl<S> FromRequestParts<S> for Claims
+where
+    S: Send + Sync,
+{
+    type Rejection = AuthError;
 
-//     let claims = decode::<TokenClaims>(
-//         &token,
-//         &DecodingKey::from_secret(data.env.jwt_secret.as_ref()),
-//         &Validation::default(),
-//     )
-//     .map_err(|_| {
-//         let json_error = ErrorResponse {
-//             status: "fail",
-//             message: "Invalid token".to_string(),
-//         };
-//         (StatusCode::UNAUTHORIZED, Json(json_error))
-//     })?
-//     .claims;
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        // Extract the token from the authorization header
+        let TypedHeader(Authorization(bearer)) = parts
+            .extract::<TypedHeader<Authorization<Bearer>>>()
+            .await
+            .map_err(|_| AuthError::InvalidToken)?;
+        // Decode the user data
+        let token_data = decode::<Claims>(bearer.token(), &KEYS.decoding, &Validation::default())
+            .map_err(|_| AuthError::InvalidToken)?;
 
-//     let user_id = uuid::Uuid::parse_str(&claims.sub).map_err(|_| {
-//         let json_error = ErrorResponse {
-//             status: "fail",
-//             message: "Invalid token".to_string(),
-//         };
-//         (StatusCode::UNAUTHORIZED, Json(json_error))
-//     })?;
+        Ok(token_data.claims)
+    }
+}
 
-//     let user = sqlx::query_as!(User, "SELECT * FROM users WHERE id = $1", user_id)
-//         .fetch_optional(&data.db)
-//         .await
-//         .map_err(|e| {
-//             let json_error = ErrorResponse {
-//                 status: "fail",
-//                 message: format!("Error fetching user from database: {}", e),
-//             };
-//             (StatusCode::INTERNAL_SERVER_ERROR, Json(json_error))
-//         })?;
+impl IntoResponse for AuthError {
+    fn into_response(self) -> Response {
+        let (status, error_message) = match self {
+            AuthError::WrongCredentials => (StatusCode::UNAUTHORIZED, "Wrong credentials"),
+            AuthError::MissingCredentials => (StatusCode::BAD_REQUEST, "Missing credentials"),
+            AuthError::TokenCreation => (StatusCode::INTERNAL_SERVER_ERROR, "Token creation error"),
+            AuthError::InvalidToken => (StatusCode::BAD_REQUEST, "Invalid token"),
+        };
+        let body = Json(json!({
+            "detail": error_message,
+        }));
+        (status, body).into_response()
+    }
+}
 
-//     let user = user.ok_or_else(|| {
-//         let json_error = ErrorResponse {
-//             status: "fail",
-//             message: "The user belonging to this token no longer exists".to_string(),
-//         };
-//         (StatusCode::UNAUTHORIZED, Json(json_error))
-//     })?;
+pub struct Keys {
+    pub encoding: EncodingKey,
+    pub decoding: DecodingKey,
+}
 
-//     req.extensions_mut().insert(user);
-//     Ok(next.run(req).await)
-// }
+impl Keys {
+    pub fn new(secret: &[u8]) -> Self {
+        Self {
+            encoding: EncodingKey::from_secret(secret),
+            decoding: DecodingKey::from_secret(secret),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Claims {
+    pub sub: String,
+    pub exp: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AuthBody {
+    pub access_token: String,
+    pub token_type: String,
+    pub username: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AuthPayload {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug)]
+pub enum AuthError {
+    WrongCredentials,
+    MissingCredentials,
+    TokenCreation,
+    InvalidToken,
+}

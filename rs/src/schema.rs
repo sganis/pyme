@@ -18,8 +18,6 @@ pub struct CreateItemSchema {
     pub product: String,
     pub quantity: i32,
     pub price: i32,
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // pub category: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

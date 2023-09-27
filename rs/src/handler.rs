@@ -1,120 +1,132 @@
 use std::sync::Arc;
 use serde_json::json;
+use jsonwebtoken::{encode, Header};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     Json,
 };
-
-
 use crate::{
+    auth::{Claims,AuthError, AuthPayload, AuthBody, KEYS},
     model::ItemModel,
     schema::{CreateItemSchema, FilterOptions, UpdateItemSchema},
     AppState,
 };
 
 
+pub async fn protected(claims: Claims) -> Result<String, AuthError> {
+    Ok(format!(
+        "Welcome to the protected area :)\nYour data:\n{claims}",
+    ))
+}
+
+pub async fn token(
+    Json(payload): Json<AuthPayload>
+) -> Result<Json<AuthBody>, AuthError> {
+    let username = payload.username;
+    let password = payload.password;
+    if username.is_empty() || password.is_empty() {
+        return Err(AuthError::MissingCredentials);
+    }
+    if username != "alice" || password != "secret" {
+        return Err(AuthError::WrongCredentials);
+    }
+    let claims = Claims {
+        sub: username.to_owned(),
+        exp: 2000000000, // May 2033
+    };
+    let token = encode(&Header::default(), &claims, &KEYS.encoding)
+        .map_err(|_| AuthError::TokenCreation)?;
+
+    Ok(Json(AuthBody::new(token, username)))
+}
+
 
 pub async fn get_items(
+    _claims: Claims,
     opts: Option<Query<FilterOptions>>,
-    State(data): State<Arc<AppState>>,
+    State(data): State<Arc<AppState>>
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let Query(opts) = opts.unwrap_or_default();
     let limit = opts.limit.unwrap_or(10);
     let offset = (opts.page.unwrap_or(1) - 1) * limit;
 
-    let query_result = sqlx::query_as::<_,ItemModel>(
+    let query = sqlx::query_as::<_,ItemModel>(
         "SELECT * FROM pyme ORDER BY id DESC limit $1 offset $2")
         .bind(limit as i32)
         .bind(offset as i32)
         .fetch_all(&data.db)
         .await;
 
-    if query_result.is_err() {
-        let error_response = serde_json::json!({
-            "status": "fail",
-            "message": "Something bad happened while fetching all note items",
+    if query.is_err() {
+        let error = serde_json::json!({
+            "detail": "Something bad happened while fetching all item items",
         });
-        println!("{:?}", query_result);
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error_response)));
+        println!("{:?}", query);
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)));
     }
 
-    let items = query_result.unwrap();
-
-    let json_response = serde_json::json!({
-        "status": "success",
-        "results": items.len(),
-        "items": items
-    });
+    let items = query.unwrap();
+    let json_response = json!(items);
     Ok(Json(json_response))
 }
 
 pub async fn get_item(
+    _claims: Claims,
     Path(id): Path<i32>,
-    State(data): State<Arc<AppState>>,
+    State(data): State<Arc<AppState>>
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let query_result = sqlx::query_as::<_, ItemModel>(
+    let query = sqlx::query_as::<_, ItemModel>(
         "SELECT * FROM pyme WHERE id = $1"  
         ).bind(id)
         .fetch_one(&data.db)
         .await;
 
-    match query_result {
-        Ok(note) => {
-            let note_response = serde_json::json!({
-                "status": "success",
-                "data": serde_json::json!({
-                "note": note
-            })});
-            return Ok(Json(note_response));
+    match query {
+        Ok(item) => {
+            return Ok(Json(json!(item)));
         }
         Err(e) => {
-            let error_response = serde_json::json!({
-                "status": "fail",
-                "message": format!("Item with ID: {} not found", id)
+            let error = json!({
+                "detail": format!("Item with ID: {} not found", id)
             });
             println!("{:?}", e);
-            return Err((StatusCode::NOT_FOUND, Json(error_response)));
+            return Err((StatusCode::NOT_FOUND, Json(error)));
         }
     }
 }
 
 pub async fn create_item(
+    _claims: Claims,
     State(data): State<Arc<AppState>>,
     Json(body): Json<CreateItemSchema>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let query_result = sqlx::query_as::<_, ItemModel>(
-        "INSERT INTO pyme (date,customer,product,quantity,price) 
-            VALUES ($1, $2, $3, $5, $5) RETURNING *")
+    let query = sqlx::query_as::<_, ItemModel>(
+        "INSERT INTO pyme (date,customer,product,quantity,price,deleted) 
+            VALUES ($1, $2, $3, $4, $5, false) RETURNING *")
         .bind(body.date.to_string())
         .bind(body.customer.to_string())
         .bind(body.product.to_string())
-        .bind(body.quantity.to_string())
-        .bind(body.price.to_string())
-        //.bind(body.category.to_owned().unwrap_or("".to_string())
+        .bind(body.quantity as i32)
+        .bind(body.price as i32)
         .fetch_one(&data.db)
         .await;
 
-    match query_result {
-        Ok(note) => {
-            let note_response = json!({
-                "status": "success",
-                "data": json!({
-                "note": note
-            })});
-            return Ok((StatusCode::CREATED, Json(note_response)));
+    match query {
+        Ok(item) => {
+            let res = json!(item);
+            return Ok((StatusCode::CREATED, Json(res)));
         }
         Err(e) => {
             if e.to_string()
                 .contains("duplicate key value violates unique constraint")
             {
-                let error_response = serde_json::json!({
-                    "status": "fail",
-                    "message": "Item with that title already exists",
+                let error = json!({
+                    "detail": "Item with that title already exists",
                 });
                 println!("{:?}", e);
-                return Err((StatusCode::CONFLICT, Json(error_response)));
+                return Err((StatusCode::CONFLICT, Json(error)));
             }
             println!("{:?}", e);
             return Err((
@@ -126,28 +138,28 @@ pub async fn create_item(
 }
 
 pub async fn update_item(
+    _claims: Claims,
     Path(id): Path<i32>,
     State(data): State<Arc<AppState>>,
     Json(body): Json<UpdateItemSchema>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let query_result = sqlx::query_as::<_, ItemModel>(
+    let query = sqlx::query_as::<_, ItemModel>(
         "SELECT * FROM items WHERE id = $1")
         .bind(id)
         .fetch_one(&data.db)
         .await;
 
-    if query_result.is_err() {
-        let error_response = serde_json::json!({
-            "status": "fail",
-            "message": format!("Item with ID: {} not found", id)
+    if query.is_err() {
+        let error = json!({
+            "datail": format!("Item with ID: {} not found", id)
         });
-        println!("{:?}", query_result);
-        return Err((StatusCode::NOT_FOUND, Json(error_response)));
+        println!("{:?}", query);
+        return Err((StatusCode::NOT_FOUND, Json(error)));
     }
 
-    let item = query_result.unwrap();
+    let item = query.unwrap();
 
-    let query_result = sqlx::query_as::<_, ItemModel>(
+    let query = sqlx::query_as::<_, ItemModel>(
         "UPDATE items SET date=$1, customer=$2, product=$3, 
             quantity=$4, price=$5 WHERE id=$6 RETURNING *")
         .bind(body.date.to_owned().unwrap_or(item.date))
@@ -159,15 +171,9 @@ pub async fn update_item(
         .fetch_one(&data.db)
         .await;
 
-    match query_result {
+    match query {
         Ok(item) => {
-            let item_response = serde_json::json!({
-                "status": "success",
-                "data": serde_json::json!({
-                "item": item
-            })});
-
-            return Ok(Json(item_response));
+            return Ok(Json(serde_json::json!(item)));
         }
         Err(e) => {
             println!("{:?}", e);
@@ -180,8 +186,9 @@ pub async fn update_item(
 }
 
 pub async fn delete_item(
+    _claims: Claims,
     Path(id): Path<i32>,
-    State(data): State<Arc<AppState>>,
+    State(data): State<Arc<AppState>>
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let rows_affected = sqlx::query("DELETE FROM items  WHERE id = $1")
         .bind(id)
@@ -191,11 +198,10 @@ pub async fn delete_item(
         .rows_affected();
 
     if rows_affected == 0 {
-        let error_response = serde_json::json!({
-            "status": "fail",
-            "message": format!("Item with ID: {} not found", id)
+        let error = json!({
+            "detail": format!("Item with ID: {} not found", id)
         });
-        return Err((StatusCode::NOT_FOUND, Json(error_response)));
+        return Err((StatusCode::NOT_FOUND, Json(error)));
     }
 
     Ok(StatusCode::NO_CONTENT)
@@ -216,20 +222,20 @@ pub async fn delete_item(
 //             .fetch_one(&data.db)
 //             .await
 //             .map_err(|e| {
-//                 let error_response = serde_json::json!({
+//                 let error = serde_json::json!({
 //                     "status": "fail",
 //                     "message": format!("Database error: {}", e),
 //                 });
-//                 (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+//                 (StatusCode::INTERNAL_SERVER_ERROR, Json(error))
 //             })?;
 
 //     if let Some(exists) = user_exists {
 //         if exists {
-//             let error_response = serde_json::json!({
+//             let error = serde_json::json!({
 //                 "status": "fail",
 //                 "message": "User with that email already exists",
 //             });
-//             return Err((StatusCode::CONFLICT, Json(error_response)));
+//             return Err((StatusCode::CONFLICT, Json(error)));
 //         }
 //     }
 
@@ -237,11 +243,11 @@ pub async fn delete_item(
 //     let hashed_password = Argon2::default()
 //         .hash_password(body.password.as_bytes(), &salt)
 //         .map_err(|e| {
-//             let error_response = serde_json::json!({
+//             let error = serde_json::json!({
 //                 "status": "fail",
 //                 "message": format!("Error while hashing password: {}", e),
 //             });
-//             (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+//             (StatusCode::INTERNAL_SERVER_ERROR, Json(error))
 //         })
 //         .map(|hash| hash.to_string())?;
 
@@ -255,11 +261,11 @@ pub async fn delete_item(
 //     .fetch_one(&data.db)
 //     .await
 //     .map_err(|e| {
-//         let error_response = serde_json::json!({
+//         let error = serde_json::json!({
 //             "status": "fail",
 //             "message": format!("Database error: {}", e),
 //         });
-//         (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+//         (StatusCode::INTERNAL_SERVER_ERROR, Json(error))
 //     })?;
 
 //     let user_response = serde_json::json!({"status": "success","data": serde_json::json!({
@@ -281,18 +287,18 @@ pub async fn delete_item(
 //     .fetch_optional(&data.db)
 //     .await
 //     .map_err(|e| {
-//         let error_response = serde_json::json!({
+//         let error = serde_json::json!({
 //             "status": "error",
 //             "message": format!("Database error: {}", e),
 //         });
-//         (StatusCode::INTERNAL_SERVER_ERROR, Json(error_response))
+//         (StatusCode::INTERNAL_SERVER_ERROR, Json(error))
 //     })?
 //     .ok_or_else(|| {
-//         let error_response = serde_json::json!({
+//         let error = serde_json::json!({
 //             "status": "fail",
 //             "message": "Invalid email or password",
 //         });
-//         (StatusCode::BAD_REQUEST, Json(error_response))
+//         (StatusCode::BAD_REQUEST, Json(error))
 //     })?;
 
 //     let is_valid = match PasswordHash::new(&user.password) {
@@ -303,11 +309,11 @@ pub async fn delete_item(
 //     };
 
 //     if !is_valid {
-//         let error_response = serde_json::json!({
+//         let error = serde_json::json!({
 //             "status": "fail",
 //             "message": "Invalid email or password"
 //         });
-//         return Err((StatusCode::BAD_REQUEST, Json(error_response)));
+//         return Err((StatusCode::BAD_REQUEST, Json(error)));
 //     }
 
 //     let now = chrono::Utc::now();

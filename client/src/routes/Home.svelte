@@ -35,11 +35,12 @@
 
 
     onMount(async () => {
+      console.log(url);
         if (manager===undefined)
             manager = new ItemManager(url);
         await manager.search();
         error = manager.error;
-        items = manager.result;
+        items = manager.result;       
 	  });
 
     const refresh = async () => {

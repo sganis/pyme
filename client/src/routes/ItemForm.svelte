@@ -52,11 +52,8 @@
 	});
 
     const handleSubmit = async () => {
-        // console.log(currentCustomer);
         item.customer = currentCustomer;
-        // if(!currentCustomer) {
-        //     return;
-        // }
+        item.quantity = Number.parseInt(item.quantity);
 		try {
 			await schema.validate(item, { abortEarly: false });
 			errors = {};

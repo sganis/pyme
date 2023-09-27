@@ -3,19 +3,19 @@ mod model;
 mod route;
 mod schema;
 mod auth;
-mod response;
+
 
 use std::sync::Arc;
-
-use axum::http::{
-    header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
-    HeaderValue, Method,
-};
+use std::net::SocketAddr;
 use dotenv::dotenv;
 use route::create_router;
 use tower_http::cors::CorsLayer;
-
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use axum::http::{
+    header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
+    Method,
+};
 
 pub struct AppState {
     db: Pool<Postgres>,
@@ -23,6 +23,14 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "pyme=debug".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
     dotenv().ok();
 
     let database_url = std::env::var("DATABASE_URL")
@@ -45,6 +53,7 @@ async fn main() {
         .allow_origin([
             "http://localhost:8000".parse().unwrap(),
             "http://localhost:5173".parse().unwrap(),
+            "http://127.0.0.0:5173".parse().unwrap(),
             "https://pyme-sganis.vercel.app".parse().unwrap(),
         ])
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
@@ -53,9 +62,12 @@ async fn main() {
 
     let app = create_router(Arc::new(AppState { db: pool.clone() })).layer(cors);
 
-    println!("Server started successfully at 0.0.0.0:8000");
-    axum::Server::bind(&"0.0.0.0:8000".parse().unwrap())
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    println!("Server started successfully at 127.0.0.1:8000");
+
+    let addr = SocketAddr::from(([127, 0, 0, 1], 8000));
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
+
+
+
