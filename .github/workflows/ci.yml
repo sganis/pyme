@@ -9,19 +9,20 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    working-directory: rs
     steps:
       - uses: actions/checkout@v3
       - name: Build
         run: cargo build --verbose
+        working-directory: rs
       - name: Run tests
         run: cargo test --verbose
+        working-directory: rs
   deploy:
     runs-on: ubuntu-latest
-    working-directory: rs
     steps:
       - uses: shuttle-hq/deploy-action@main
         with:
           deploy-key: ${{ secrets.SHUTTLE_DEPLOY_KEY }}
+          working-directory: rs
           name: pyme
           no-test: true
