@@ -1,14 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug, Default)]
-pub struct FilterOptions {
+pub struct Params {
     pub page: Option<usize>,
     pub limit: Option<usize>,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct ParamOptions {
-    pub id: i32,
+    pub q: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

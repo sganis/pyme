@@ -44,6 +44,7 @@ class UserCreate(UserBase):
     password        : str
 
 
+
 ##########################################################################
 # pyme 
 ##########################################################################
@@ -52,6 +53,13 @@ class Pyme(Table, table=True):
     customer    : Optional[str] = Field(index=True)
     product     : Optional[str] = Field(index=True)
     quantity    : Optional[int]
+    price       : Optional[int]
+
+##########################################################################
+# pyme product 
+##########################################################################
+class PymeProduct(Table, table=True):
+    name        : Optional[str] = Field(index=True)
     price       : Optional[int]
 
 

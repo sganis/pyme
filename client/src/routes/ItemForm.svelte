@@ -76,7 +76,7 @@
             return customers;
         }
         try {
-            const r = await fetch(`${API_URL}customer/`, {
+            const r = await fetch(`${API_URL}pyme/customer/?q=${q}`, {
                 headers: {
                     Authorization: 'Bearer ' + $state.token
                 }

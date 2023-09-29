@@ -14,4 +14,18 @@ pub struct ItemModel {
     pub created: Option<chrono::DateTime<chrono::Utc>>,
     pub updated: Option<chrono::DateTime<chrono::Utc>>,
 }
+pub struct ProductModel {
+    pub id: i32,
+    pub name: String,
+    pub price: i32,
+    pub deleted: Option<bool>,
+    pub created: Option<chrono::DateTime<chrono::Utc>>,
+    pub updated: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Debug, FromRow, Deserialize, Serialize)]
+#[allow(non_snake_case)]
+pub struct CustomerModel {
+    pub customer: String,
+}
 

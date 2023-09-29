@@ -85,7 +85,7 @@ def f(id: int, session: Session = Depends(get_session)):
     return obj_db
 
 
-@router.get("/customer/", response_model=list[str])
+@router.get("/pyme/customer/", response_model=list[str])
 def f(session: Session = Depends(get_session)):
     try:
         query = select(Pyme.customer.distinct()).where(Pyme.deleted == False)

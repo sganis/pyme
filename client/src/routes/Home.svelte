@@ -1,5 +1,6 @@
 <script>
     import { onMount } from 'svelte';
+    import { push } from 'svelte-spa-router';
     import { API_URL, state } from '../lib/store';
     import ItemsTable from '../lib/ItemTable.svelte';
     import ItemManager from "../lib/itemManager.js"
@@ -31,16 +32,18 @@
     let error = '';
     let timer;
     const waitTime = 500;
-    
-
-
+  
     onMount(async () => {
+      if (!$state.token) {
+       push('/login');
+       return;
+      }    
       console.log(url);
-        if (manager===undefined)
-            manager = new ItemManager(url);
-        await manager.search();
-        error = manager.error;
-        items = manager.result;       
+      if (manager===undefined)
+          manager = new ItemManager(url);
+      await manager.search();
+      error = manager.error;
+      items = manager.result;       
 	  });
 
     const refresh = async () => {
