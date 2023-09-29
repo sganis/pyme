@@ -1,47 +1,92 @@
 use std::sync::Arc;
-use serde_json::json;
-use jsonwebtoken::{encode, Header};
+//use jsonwebtoken::{encode, Header};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use axum::{
     extract::{Path, Query, State, Json},
     http::StatusCode,
     response::IntoResponse,
 };
+use jsonwebtoken::{encode, Header};
+use serde_json::{json, Value};
+
 use sqlx::Row;
 use sqlx::Execute;
 use crate::{
-    auth::{Claims,AuthError, AuthPayload, AuthBody, KEYS},
+    auth::{Claims, AuthPayload, AuthError, KEYS},
     model::ItemModel,
     schema::{Params, CreateItemSchema, UpdateItemSchema},
-    AppState,
+    AppState,    
 };
 
-
-// pub async fn protected(claims: Claims) -> Result<String, AuthError> {
-//     Ok(format!(
-//         "Welcome to the protected area :)\nYour data:\n{claims}",
-//     ))
-// }
+pub fn get_timestamp_8_hours_from_now() -> u64 {
+    let now = SystemTime::now();
+    let since_the_epoch = now.duration_since(UNIX_EPOCH).expect("Time went backwards");
+    let eighthoursfromnow = since_the_epoch + Duration::from_secs(28800);
+    eighthoursfromnow.as_secs()
+}
 
 pub async fn token(
-    Json(payload): Json<AuthPayload>
-) -> Result<Json<AuthBody>, AuthError> {
-    let username = payload.username;
-    let password = payload.password;
-    if username.is_empty() || password.is_empty() {
+    Json(credentials): Json<AuthPayload>,
+    //Extension(pool): Extension<PgPool>,
+) -> Result<Json<Value>, AuthError> {
+    // check if email or password is a blank string
+    if credentials.username.is_empty() || credentials.password.is_empty() {
         return Err(AuthError::MissingCredentials);
     }
-    if username != "alice" || password != "secret" {
-        return Err(AuthError::WrongCredentials);
-    }
-    let claims = Claims {
-        sub: username.to_owned(),
-        exp: 2000000000, // May 2033
-    };
-    let token = encode(&Header::default(), &claims, &KEYS.encoding)
-        .map_err(|_| AuthError::TokenCreation)?;
 
-    Ok(Json(AuthBody::new(token, username)))
+    // get the user for the email from database
+    // let user = sqlx::query_as::<_, models::auth::User>(
+    //     "SELECT username, password FROM users where email = $1",
+    // )
+    // .bind(&credentials.email)
+    // .fetch_optional(&pool)
+    // .await
+    // .map_err(|err| {
+    //     dbg!(err);
+    //     AuthError::InternalServerError
+    // })?;
+
+    // if password is encrypted than decode it first before comparing
+    if credentials.username != "alice" || credentials.password != "secret" {
+        // password is incorrect
+        Err(AuthError::WrongCredentials)
+    } else {
+        let claims = Claims {
+            sub: credentials.username.to_owned(),
+            exp: get_timestamp_8_hours_from_now(),
+        };
+        let token = encode(&Header::default(), &claims, &KEYS.encoding)
+            .map_err(|_| AuthError::TokenCreation)?;
+        // return bearer token
+        Ok(Json(json!({ 
+            "access_token": 
+            token, "type": "Bearer", 
+            "username": credentials.username 
+        })))
+    }
 }
+
+
+// pub async fn token(
+//     Json(payload): Json<AuthPayload>
+// ) -> Result<Json<AuthBody>, AuthError> {
+//     let username = payload.username;
+//     let password = payload.password;
+//     if username.is_empty() || password.is_empty() {
+//         return Err(AuthError::MissingCredentials);
+//     }
+//     if username != "alice" || password != "secret" {
+//         return Err(AuthError::WrongCredentials);
+//     }
+//     let claims = Claims {
+//         sub: username.to_owned(),
+//         exp: 2000000000, // May 2033
+//     };
+//     let token = encode(&Header::default(), &claims, &KEYS.encoding)
+//         .map_err(|_| AuthError::TokenCreation)?;
+
+//     Ok(Json(AuthBody::new(token, username)))
+// }
 
 
 pub async fn get_items(
@@ -52,6 +97,8 @@ pub async fn get_items(
     let Query(params) = params.unwrap_or_default();
     let limit = params.limit.unwrap_or(100);
     let offset = (params.page.unwrap_or(1) - 1) * limit;
+
+    println!("claims: {} {}", _claims.sub, _claims.exp);
 
     let query = sqlx::query_as::<_,ItemModel>(
         "SELECT * FROM pyme ORDER BY id DESC limit $1 offset $2")

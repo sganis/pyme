@@ -49,4 +49,4 @@ cython_debug/
 
 .vercel
 
-.vercel
+Secrets.toml

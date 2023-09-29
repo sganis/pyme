@@ -1,6 +1,6 @@
+use serde::{Deserialize, Serialize};
 use jsonwebtoken::{decode, DecodingKey, EncodingKey, Validation};
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::fmt::Display;
 use axum::{
@@ -8,15 +8,45 @@ use axum::{
     extract::FromRequestParts,
     response::{IntoResponse, Response},
     Json, RequestPartsExt,
+    headers::{authorization::Bearer, Authorization},
+    TypedHeader,
 };
+
 use axum::http::{
     request::Parts, 
     StatusCode, 
 };
-use axum_extra::{
-    headers::{authorization::Bearer, Authorization},
-    TypedHeader,
-};
+// use axum_extra::{
+//     headers::{authorization::Bearer, Authorization},
+//     TypedHeader,
+// };
+
+
+#[derive(Deserialize, sqlx::FromRow)]
+pub struct AuthPayload {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct Claims {
+    pub sub: String,
+    pub exp: u64,
+}
+
+pub struct Keys {
+    pub encoding: EncodingKey,
+    pub decoding: DecodingKey,
+}
+
+impl Keys {
+    pub fn new(secret: &[u8]) -> Self {
+        Self {
+            encoding: EncodingKey::from_secret(secret),
+            decoding: DecodingKey::from_secret(secret),
+        }
+    }
+}
 
 pub static KEYS: Lazy<Keys> = Lazy::new(|| {
     let secret = std::env::var("JWT_SECRET").expect("JWT_SECRET must be set");
@@ -24,22 +54,12 @@ pub static KEYS: Lazy<Keys> = Lazy::new(|| {
 });
 
 
-
 impl Display for Claims {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "username: {}", self.sub)
+        write!(f, "username: {} expiration: {}", self.sub, self.exp)
     }
 }
 
-impl AuthBody {
-    pub fn new(access_token: String, username: String) -> Self {
-        Self {
-            access_token,
-            token_type: "Bearer".to_string(),
-            username,
-        }
-    }
-}
 
 #[async_trait]
 impl<S> FromRequestParts<S> for Claims
@@ -77,38 +97,48 @@ impl IntoResponse for AuthError {
     }
 }
 
-pub struct Keys {
-    pub encoding: EncodingKey,
-    pub decoding: DecodingKey,
-}
+// pub struct Keys {
+//     pub encoding: EncodingKey,
+//     pub decoding: DecodingKey,
+// }
 
-impl Keys {
-    pub fn new(secret: &[u8]) -> Self {
-        Self {
-            encoding: EncodingKey::from_secret(secret),
-            decoding: DecodingKey::from_secret(secret),
-        }
-    }
-}
+// impl Keys {
+//     pub fn new(secret: &[u8]) -> Self {
+//         Self {
+//             encoding: EncodingKey::from_secret(secret),
+//             decoding: DecodingKey::from_secret(secret),
+//         }
+//     }
+// }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Claims {
-    pub sub: String,
-    pub exp: usize,
-}
+// #[derive(Debug, Serialize, Deserialize)]
+// pub struct Claims {
+//     pub sub: String,
+//     pub exp: usize,
+// }
 
-#[derive(Debug, Serialize)]
-pub struct AuthBody {
-    pub access_token: String,
-    pub token_type: String,
-    pub username: String,
-}
+// #[derive(Debug, Serialize)]
+// pub struct AuthBody {
+//     pub access_token: String,
+//     pub token_type: String,
+//     pub username: String,
+// }
 
-#[derive(Debug, Deserialize)]
-pub struct AuthPayload {
-    pub username: String,
-    pub password: String,
-}
+// #[derive(Debug, Deserialize)]
+// pub struct AuthPayload {
+//     pub username: String,
+//     pub password: String,
+// }
+
+// impl AuthBody {
+//     pub fn new(access_token: String, username: String) -> Self {
+//         Self {
+//             access_token,
+//             token_type: "Bearer".to_string(),
+//             username,
+//         }
+//     }
+// }
 
 #[derive(Debug)]
 pub enum AuthError {

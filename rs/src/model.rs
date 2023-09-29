@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use jsonwebtoken::{DecodingKey, EncodingKey};
+
 
 #[derive(Debug, FromRow, Deserialize, Serialize)]
 #[allow(non_snake_case)]
@@ -28,4 +30,3 @@ pub struct ProductModel {
 pub struct CustomerModel {
     pub customer: String,
 }
-
