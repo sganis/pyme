@@ -16,6 +16,6 @@ jobs:
           # allow-dirty: "true"
           no-test: true
           # cargo-shuttle-version: "0.21.0"
-          secrets: |
-            DABATASE_URL = '${{ secrets.DABATASE_URL }}'
-            JWT_SECRET = '${{ secrets.JWT_SECRET }}'
+          # secrets: |
+          #   DABATASE_URL = '${{ secrets.DABATASE_URL }}'
+          #   JWT_SECRET = '${{ secrets.JWT_SECRET }}'
