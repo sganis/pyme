@@ -15,8 +15,8 @@ use crate::{
 };
 
 pub fn create_router(app_state: Arc<AppState>) -> Router {
-    let spa = ServeDir::new("../client/dist")
-        .not_found_service(ServeFile::new("../client/dist/index.html"));
+    let spa = ServeDir::new("dist")
+        .not_found_service(ServeFile::new("dist/index.html"));
     Router::new()
     .route("/token", post(token))
     .route("/pyme/", get(get_items).post(create_item))
@@ -26,7 +26,7 @@ pub fn create_router(app_state: Arc<AppState>) -> Router {
     .route("/pyme/stat/year", get(get_stat_year))
     .route("/pyme/stat/quarter", get(get_stat_quarter))
     .route("/pyme/:id", get(get_item).put(update_item).delete(delete_item))
-    .nest_service("/client/dist", spa.clone())
+    .nest_service("/", spa.clone())
     .fallback_service(spa)
     .with_state(app_state)
 }
