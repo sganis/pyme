@@ -2,7 +2,7 @@
 // @ts-nocheck
 
     import { onMount } from 'svelte';
-    import { push, pop, querystring } from 'svelte-spa-router';
+    import { push } from 'svelte-spa-router';
     import { DateInput } from 'date-picker-svelte'
     import AutoComplete from "simple-svelte-autocomplete"
     import dayjs from 'dayjs';
@@ -226,7 +226,7 @@
         margin-bottom: 2px;
         font-size: small;
     }
-    input, textarea {
+    input{
         background-color: whitesmoke;
     }
     :root {

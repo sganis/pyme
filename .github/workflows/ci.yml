@@ -10,16 +10,23 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Build
-        run: cargo build --release
-        working-directory: rs
-      - name: Run tests
-        run: cargo test
-        working-directory: rs
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Build frontend
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18.x"
+      - run: npm ci  --prefix ./frontend
+      - run: npm run build --prefix ./frontend
+      # - name: Build backend
+      #   run: cargo build --release
+      #   working-directory: rs
+      # - name: Run tests
+      #   run: cargo test
+      #   working-directory: rs
       - uses: shuttle-hq/deploy-action@main
         with:
           deploy-key: ${{ secrets.SHUTTLE_DEPLOY_KEY }}
-          working-directory: rs
-          name: pyme
-          no-test: true
+          # working-directory: rs
+          # name: pyme
+          # no-test: true

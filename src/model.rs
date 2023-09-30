@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use jsonwebtoken::{DecodingKey, EncodingKey};
 
 
 #[derive(Debug, FromRow, Deserialize, Serialize)]

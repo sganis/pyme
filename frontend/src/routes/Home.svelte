@@ -34,17 +34,18 @@
     const waitTime = 500;
   
     onMount(async () => {
-      if (!$state.token) {
-       push('/login');
-       return;
-      }    
-      console.log(url);
-      if (manager===undefined)
-          manager = new ItemManager(url);
-      await manager.search();
-      error = manager.error;
-      items = manager.result;       
-	  });
+        console.log('mouning home, state:', JSON.stringify($state));
+        if (!$state.token) {
+            push('/login');
+            return;
+        }    
+        console.log(url);
+        if (manager===undefined)
+            manager = new ItemManager(url);
+        await manager.search();
+        error = manager.error;
+        items = manager.result;       
+    });
 
     const refresh = async () => {
         await manager.search();

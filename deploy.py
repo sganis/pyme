@@ -5,15 +5,15 @@ import subprocess
 def run(cmd):
     subprocess.run(cmd, shell=True, check=True)
 
-with open('./client/package.json') as r:
+with open('./frontend/package.json') as r:
     js = json.loads(r.read())
 
 version = js['version']
 assert version
 
 print(f'deploying v{version}...')
-run('call npm --prefix ./client run build')
-run('git add ./client')
+run('call npm --prefix ./frontend run build')
+run('git add ./frontend')
 run(f'git commit -am "v{version}"')
 run(f'git tag -a v{version} -m v{version}')
 run('git push --follow-tags')

@@ -14,19 +14,22 @@ use crate::{
     AppState,
 };
 
-pub fn create_router(app_state: Arc<AppState>) -> Router {
-    let spa = ServeDir::new("dist")
-        .not_found_service(ServeFile::new("dist/index.html"));
+pub fn create_router(state: Arc<AppState>) -> Router {
+    let spa = ServeDir::new("frontend/dist")
+        .not_found_service(ServeFile::new("frontend/dist/index.html"));
     Router::new()
     .route("/token", post(token))
-    .route("/pyme/", get(get_items).post(create_item))
+    .route("/pyme/", get(get_items)
+        .post(create_item))
     .route("/pyme/customer/", get(get_customers))
     .route("/pyme/stat/customer", get(get_stat_customer))
     .route("/pyme/stat/product", get(get_stat_product))
     .route("/pyme/stat/year", get(get_stat_year))
     .route("/pyme/stat/quarter", get(get_stat_quarter))
-    .route("/pyme/:id", get(get_item).put(update_item).delete(delete_item))
+    .route("/pyme/:id", get(get_item)
+        .put(update_item)
+        .delete(delete_item))
     .nest_service("/", spa.clone())
     .fallback_service(spa)
-    .with_state(app_state)
+    .with_state(state)
 }

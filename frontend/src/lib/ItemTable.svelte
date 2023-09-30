@@ -112,9 +112,6 @@
     .btn-width-sm {
         width: 32px;
     }
-    a {
-        text-decoration: none;
-    }
     .bi-app {
         content: "\2122";
         color: transparent !important;

@@ -4,15 +4,10 @@ mod route;
 mod schema;
 mod auth;
 
-
 use std::sync::Arc;
-// use std::net::SocketAddr;
-// use dotenv::dotenv;
 use route::create_router;
 use tower_http::cors::CorsLayer;
-use sqlx::{postgres::PgPoolOptions, Pool, PgPool, Postgres};
-// // use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-// use axum::Router;
+use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 use axum::http::{
      header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
      Method,
@@ -22,41 +17,17 @@ pub struct AppState {
     db: Pool<Postgres>,
 }
 
-use axum::{routing::get, Router, Error};
-
-// async fn hello_world() -> &'static str {
-//     "Hello, world!"
-// }
-
-// #[shuttle_runtime::main]
-// async fn axum() -> shuttle_axum::ShuttleAxum {
-//     let router = Router::new().route("/", get(hello_world));
-
-//     Ok(router.into())
-// }
-
 
 #[shuttle_runtime::main]
 pub async fn axum (
-//#[shuttle_shared_db::Postgres] postgres: PgPool,
 #[shuttle_secrets::Secrets] secrets: shuttle_secrets::SecretStore
 ) -> shuttle_axum::ShuttleAxum {
 
     // get secret defined in `Secrets.toml` file.
-    let database_url = if let Some(database_url) = secrets.get("DATABASE_URL") {
-        database_url
-    } else {
-        "".to_string()
-    };
-    println!("database={}",database_url);
-    let jwt_secret = if let Some(jwt_secret) = secrets.get("JWT_SECRET") {
-        std::env::set_var("JWT_SECRET", jwt_secret.clone());
-        jwt_secret
-    } else {
-        "".to_string()
-    };
-    println!("jwt secret={}",jwt_secret);
-
+    std::env::set_var("JWT_SECRET", secrets.get("JWT_SECRET").expect("JWT_SECRET secret is missing"));    
+    let database_url = secrets.get("DATABASE_URL").expect("DATABASE_URL secret is missing");
+    std::env::set_var("DATABASE_URL", database_url.clone());
+    
     let pool = match PgPoolOptions::new()
         .max_connections(10)
         .connect(&database_url)
@@ -70,10 +41,6 @@ pub async fn axum (
             std::process::exit(1);
         }
     };
-    // sqlx::migrate!()
-    //     .run(&postgres)
-    //     .await
-    //     .expect("Migrations failed :(");
 
     let cors = CorsLayer::new()
         .allow_origin([
@@ -85,12 +52,7 @@ pub async fn axum (
         .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
 
     let router = create_router(Arc::new(AppState { db: pool.clone() })).layer(cors);
-
-    println!("Server started successfully at 127.0.0.1:8000");
-
-
-    //let router = Router::new().route("/", get(hello_world));
-    //let router = create_router(postgres);
+    println!("Server started successfully");
 
     Ok(router.into())
 }

@@ -25,15 +25,17 @@ export default class ItemManager {
       });
       const j = await r.json();
 
-      //console.log(j);
       if (r.status !== 200) {
         this.error = j.detail;
         apierror.set(this.error);
-
+        if (this.error === "Invalid token") {
+          state.set({});
+        }
+        console.log("url:", this.url);
         console.log(
           `searching: ${this.searchText} sortcol: ${this.sortCol} desc: ${this.sortDesc}`
         );
-        console.log("url:", this.url);
+        console.log("error:", this.error);
       } else {
         this.result = j;
       }
