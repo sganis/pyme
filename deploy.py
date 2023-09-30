@@ -1,5 +1,3 @@
-# deploy to vercel with git
-# using cli: vercel --prod
 import os
 import json
 import subprocess
@@ -19,5 +17,6 @@ run('git add ./client')
 run(f'git commit -am "v{version}"')
 run(f'git tag -a v{version} -m v{version}')
 run('git push --follow-tags')
+# run('cargo shuttle deploy')
 print('done.')
 
