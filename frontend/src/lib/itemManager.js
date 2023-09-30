@@ -3,10 +3,10 @@ import { push } from "svelte-spa-router";
 import { working, state, apierror } from "./store";
 
 export default class ItemManager {
-  constructor(url) {
+  constructor(url, sortcol, sortdesc) {
     this.url = url;
-    this.sortCol = "id";
-    this.sortDesc = false;
+    this.sortCol = sortcol;
+    this.sortDesc = sortdesc;
     this.searchText = "";
     this.result = [];
     this.error = "";

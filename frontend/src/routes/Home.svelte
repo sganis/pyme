@@ -1,6 +1,7 @@
 <script>
     import { onMount } from 'svelte';
-    import { push } from 'svelte-spa-router';
+    //import { push } from 'svelte-spa-router';
+    import dayjs from 'dayjs';
     import { API_URL, state, apierror } from '../lib/store';
     import ItemsTable from '../lib/ItemTable.svelte';
     import ItemManager from "../lib/itemManager.js"
@@ -10,24 +11,26 @@
     let isModal;
     let isModify;
     let isRemove;
-    let sortCol = 'id';
+    let sortCol = 'date';
     let sortDesc = true;
     let manager;
     let showForm = false;
     let showToolbar = true;
+    let today = dayjs().toDate();
 
     let title = "Items";
     let table = {
-        header : ['Date','Cust','Qty','Prod','Price'],
-        columns : ['date','customer','quantity','product','price'],
+        header : ['Date','Cust','Qty','Prod','Price', 'Paid'],
+        columns : ['date','customer','quantity','product','price','paid'],
     }
-    let itemInit  = {
-        id: 0,
-        name: "",
-        num_guests: 2,
-        max_guests: 3,
-    };
-
+    let itemInit = {
+        date: today,
+        customer: '',
+        product: 'A',
+        quantity: 1,
+        price: 0,
+        paid: true,
+    }
     let item = {...itemInit}
 
     let items = [];
@@ -39,7 +42,7 @@
         console.log('mouning home, state:', JSON.stringify($state));
         console.log(url);
         if (manager===undefined)
-            manager = new ItemManager(url);
+            manager = new ItemManager(url, sortCol, sortDesc);
         await manager.search();
         error = manager.error;
         items = manager.result;       
@@ -110,9 +113,11 @@
     }
     const showModify = (e) => {
         let o = e.detail;
+        o.date = dayjs(o.date).toDate();
         item = {...o};
+        showForm = true;
+        showToolbar = false;
         isModify = true;
-        isModal = true;
         error = '';
     }
     const showRemove = (e) => {
@@ -146,7 +151,7 @@
 <div class="row bg-light border-bottom">
     <div class="col h2">Item:</div>
 </div>
-<ItemForm on:close={closeForm}/>
+<ItemForm {item} {isModify} on:close={closeForm} on:saved={refresh}/>
 {/if}
 
 <br>

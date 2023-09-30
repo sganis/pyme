@@ -21,18 +21,19 @@
     let url = `${API_URL}pyme/`
     let error;
     let errors = {};
-    let isModify = false;
     let manager = null;
     let today = dayjs().toDate();
 
     let customers = [];
+    let products = [];
     let currentCustomer;
+    let currentProduct;
 
-
-    let item = {
+    export let isModify;
+    export let item = {
         date: today,
         customer: '',
-        product: '',
+        product: 'A',
         quantity: 1,
         price: 0,
         paid: true,
@@ -55,6 +56,8 @@
     onMount(async () => {
         if (!manager)
             manager = new ItemManager(url);
+        products = await getProducts();
+        updatePrice();
         errors = {}
 	});
 
@@ -84,7 +87,7 @@
             return customers;
         }
         try {
-            const r = await fetch(`${API_URL}pyme/customer/?q=${q}`, {
+            const r = await fetch(`${API_URL}pyme/customers/?q=${q}`, {
                 headers: {
                     Authorization: 'Bearer ' + $state.token
                 }
@@ -102,7 +105,25 @@
         customers = []
         return customers;
     } 
-
+    const getProducts = async () => {
+        try {
+            const r = await fetch(`${API_URL}pyme/products/`, {
+                headers: {
+                    Authorization: 'Bearer ' + $state.token
+                }
+            });
+            const js = await r.json();
+            if (r.status == 200) {
+                //console.log(js);
+                customers = js;
+                return customers;
+            } 
+        }
+        catch (err) {
+            console.log(err)
+        }
+        return [];
+    } 
     const save = async () => {
         let itemToSave = JSON.parse(JSON.stringify(item))
         // convert date to string
@@ -116,15 +137,27 @@
             await manager.modify(itemToSave);
         }
         error = manager.error;
+        dispatch('saved');
     }
 
+    const remove = async () => {
+
+    }
     const handleCreate = (username) => {
         console.log('adding ', username);
         customers.unshift(username);
         customers = customers;
         return username;
     }
-
+    const updatePrice = () => {
+        console.log('updating price...');
+        for (const p of products) {
+            if (p[0]===item.product) {
+                item.price = item.quantity * Number(p[1]);
+                break;
+            }
+        }
+    }
 </script>
 
 <div class="container">
@@ -176,24 +209,21 @@
         <div class="col">
             <label for="id" class="form-label text-nowrap">Product</label>
             <select  disabled={$working}
-                class="form-select"
-                bind:value={item.product}>                
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-                <option value="W">W</option>
-                <option value="R">R</option>
-                <option value="T">T</option>
-                <option value="V">V</option>
-                <option value="O">Other</option>                        
+                class="form-select"                
+                bind:value={item.product}
+                on:change={updatePrice}>    
+                {#each products as p}            
+                    <option value={p[0]}>{p[0]} ({p[1]})</option>
+                {/each}
             </select>
             {#if errors.product}<small class="error">{errors.product}</small>{/if}
          </div>
         <div class="col">
-            <label for="quantity" class="form-label">Quantity</label>
+            <label for="quantity" class="form-label">Units</label>
             <input type="text" pattern="\d*" 
                 disabled={$working}
-                bind:value={item.quantity}                        
+                bind:value={item.quantity}
+                on:change={updatePrice}                        
                 class="form-control" id="quantity"
                     min="1" max="100">
             {#if errors.quantity}<small class="error">{errors.quantity}</small>{/if}
@@ -218,10 +248,30 @@
             {#if errors.price}<small class="error">{errors.price}</small>{/if}
         </div>  
     </div>
+    <div class="row">
+        <div class="col">
+            <label for="notes" class="form-label">Notes</label>
+            <input type="text"
+                disabled={$working}
+                bind:value={item.notes}
+                class="form-control" id="notes">
+        </div>  
+    </div>
     <br>
     <div class="row text-end">
         <div class="col">
-            <button class="btn btn-light w-100" 
+            {#if isModify}
+            <button class="btn btn-danger  w-100"
+                on:click={remove}
+                disabled={$working}>
+                <i class="bi-trash3"/>
+            </button>
+            {/if}
+        </div>
+        <div class="col">
+        </div>
+        <div class="col">
+            <button class="btn btn-secondary w-100" 
                 on:click={close}
                 disabled={$working}>
                 Close
@@ -235,6 +285,7 @@
             </button>
         </div>
     </div>
+    
     
 </form>
 </div>

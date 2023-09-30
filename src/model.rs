@@ -12,6 +12,7 @@ pub struct ItemModel {
     pub quantity: i32,
     pub price: i32,
     pub paid: bool,
+    pub notes: Option<String>,
     pub deleted: Option<bool>,
     pub created: Option<chrono::DateTime<chrono::Utc>>,
     pub updated: Option<chrono::DateTime<chrono::Utc>>,

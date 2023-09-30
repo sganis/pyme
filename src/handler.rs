@@ -75,7 +75,7 @@ pub async fn get_items(
     let q = params.q.unwrap_or("".to_string());
     let sortcol = params.sortcol.unwrap_or("date".to_string());
     let desc = params.desc.unwrap_or(true);
-    let limit = params.limit.unwrap_or(100);
+    let limit = params.limit.unwrap_or(50);
     let offset = (params.page.unwrap_or(1) - 1) * limit;  
 
     let mut query = QueryBuilder::new("SELECT * from pyme");
@@ -84,7 +84,7 @@ pub async fn get_items(
         query.push_bind(format!("%{}%", q));
     }
     query.push(" order by ");
-    query.push_bind(sortcol.clone());
+    query.push(sortcol.clone());
     if desc {
         query.push(" desc");
     } else {
@@ -102,6 +102,7 @@ pub async fn get_items(
 
     match query {
         Ok(items) => {
+            println!("{:?}", items[0]);
             Ok(Json(json!(items)))
         }
         Err(e) => {
@@ -117,14 +118,14 @@ pub async fn get_items(
 pub async fn get_item(
     _claims: Claims,
     Path(id): Path<i32>,
-    State(data): State<Arc<AppState>>
+    State(state): State<Arc<AppState>>
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     println!("id={}", id);
     let query = sqlx::query_as::<_, ItemModel>(r#"
         SELECT * FROM pyme WHERE id = $1
         "#)
         .bind(id)
-        .fetch_one(&data.db).await;
+        .fetch_one(&state.db).await;
 
     match query {
         Ok(item) => {
@@ -142,19 +143,20 @@ pub async fn get_item(
 
 pub async fn create_item(
     _claims: Claims,
-    State(data): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<CreateItemSchema>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query_as::<_,ItemModel>(
-        "INSERT INTO pyme (date,customer,product,quantity,price,paid) 
-            VALUES ($1, $2, $3, $4, $5, $6) RETURNING *")
+        "INSERT INTO pyme (date,customer,product,quantity,price,paid, notes) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *")
         .bind(body.date.to_string())
         .bind(body.customer.to_string())
         .bind(body.product.to_string())
         .bind(body.quantity)
         .bind(body.price)
         .bind(body.paid)
-        .fetch_one(&data.db)
+        .bind(body.notes)
+        .fetch_one(&state.db)
         .await;
 
     match query {
@@ -183,19 +185,19 @@ pub async fn create_item(
 
 pub async fn update_item(
     _claims: Claims, 
-    Path(id): Path<i32>, 
-    State(data): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Json(body): Json<UpdateItemSchema>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    
     let query = sqlx::query_as::<_, ItemModel>(
-        "SELECT * FROM items WHERE id = $1")
-        .bind(id)
-        .fetch_one(&data.db)
+        "SELECT * FROM pyme WHERE id = $1")
+        .bind(body.id)
+        .fetch_one(&state.db)
         .await;
 
     if query.is_err() {
         let error = json!({
-            "datail": format!("Item with ID: {} not found", id)
+            "datail": format!("Item with ID: {} not found", body.id)
         });
         println!("{:?}", query);
         return Err((StatusCode::NOT_FOUND, Json(error)));
@@ -204,15 +206,18 @@ pub async fn update_item(
     let item = query.unwrap();
 
     let query = sqlx::query_as::<_, ItemModel>(
-        "UPDATE items SET date=$1, customer=$2, product=$3, 
-            quantity=$4, price=$5 WHERE id=$6 RETURNING *")
+        "UPDATE pyme SET date=$1, customer=$2, product=$3, 
+            quantity=$4, price=$5, paid=$6, notes=$7 
+            WHERE id=$8 RETURNING *")
         .bind(body.date.to_owned().unwrap_or(item.date))
         .bind(body.customer.to_owned().unwrap_or(item.customer))
         .bind(body.product.to_owned().unwrap_or(item.product))
         .bind(body.quantity.to_owned().unwrap_or(item.quantity))
         .bind(body.price.to_owned().unwrap_or(item.quantity))
-        .bind(id)
-        .fetch_one(&data.db)
+        .bind(body.paid.to_owned().unwrap_or(item.paid))
+        .bind(body.notes.to_owned().unwrap_or(item.notes.unwrap_or("".to_string())))
+        .bind(body.id)
+        .fetch_one(&state.db)
         .await;
 
     match query {
@@ -232,11 +237,11 @@ pub async fn update_item(
 pub async fn delete_item(
     _claims: Claims, 
     Path(id): Path<i32>,  
-    State(data): State<Arc<AppState>>
+    State(state): State<Arc<AppState>>
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let rows_affected = sqlx::query("DELETE FROM items  WHERE id = $1")
+    let rows_affected = sqlx::query("DELETE FROM pyme  WHERE id = $1")
         .bind(id)
-        .execute(&data.db)
+        .execute(&state.db)
         .await
         .unwrap()
         .rows_affected();
@@ -255,7 +260,7 @@ pub async fn delete_item(
 pub async fn get_customers(
     _claims: Claims, 
     params: Option<Query<Params>>, 
-    State(data): State<Arc<AppState>>
+    State(state): State<Arc<AppState>>
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     //println!("{:?}", params);
     let Query(params) = params.unwrap_or_default();
@@ -274,7 +279,7 @@ pub async fn get_customers(
             SELECT DISTINCT customer FROM pyme ORDER BY customer
             "#);
     }
-    let query = query.fetch_all(&data.db).await; 
+    let query = query.fetch_all(&state.db).await; 
 
     match query {
         Ok(records) => {
@@ -294,9 +299,45 @@ pub async fn get_customers(
     } 
 }
 
+pub async fn get_products(
+    _claims: Claims, 
+    State(state): State<Arc<AppState>>
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let query = sqlx::query(r#"
+        select name, cast(price as text) as price from pymeproduct order by name
+        "#)
+        .fetch_all(&state.db).await; 
+
+    match query {
+        Ok(records) => {
+            let mut rows = Vec::<Vec::<String>>::new();
+            for rec in records {
+                let mut r = Vec::<String>::new();
+                r.push(rec.get(0));
+                r.push(rec.get(1));
+                rows.push(r);
+            }
+            Ok(Json(rows))        
+        },
+        Err(e) => {
+            println!("error: {:?}", e);
+            let error = serde_json::json!({
+                "detail": "Something bad happened while fetching products",
+            });
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)));
+        }
+    } 
+}
+
+
+
+
+
+
+
 pub async fn get_stat_customer(
     _claims: Claims, 
-    State(data): State<Arc<AppState>>
+    State(state): State<Arc<AppState>>
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query(r#"
         select customer, cast(sum(quantity) as text), cast(sum(price) as text)
@@ -304,7 +345,7 @@ pub async fn get_stat_customer(
         group by customer 
         order by sum(price) desc
         "#)
-        .fetch_all(&data.db).await; 
+        .fetch_all(&state.db).await; 
 
     match query {
         Ok(records) => {
@@ -329,7 +370,7 @@ pub async fn get_stat_customer(
 }
 pub async fn get_stat_product(
     _claims: Claims, 
-    State(data): State<Arc<AppState>>
+    State(state): State<Arc<AppState>>
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query(r#"
         select product, cast(sum(quantity) as text), cast(sum(price) as text) 
@@ -337,7 +378,7 @@ pub async fn get_stat_product(
         group by product 
         order by sum(price) desc
         "#)
-        .fetch_all(&data.db).await; 
+        .fetch_all(&state.db).await; 
 
     match query {
         Ok(records) => {
@@ -363,7 +404,7 @@ pub async fn get_stat_product(
 
 pub async fn get_stat_year(
     _claims: Claims, 
-    State(data): State<Arc<AppState>>
+    State(state): State<Arc<AppState>>
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query(r#"
         select cast(year as text), cast(sum(quantity) as text), cast(sum(price) as text)
@@ -376,9 +417,9 @@ pub async fn get_stat_year(
                 ,price
                 from public.pyme
             ) as t
-        group by year order by year
+        group by year order by year desc
         "#)
-        .fetch_all(&data.db).await; 
+        .fetch_all(&state.db).await; 
 
     match query {
         Ok(records) => {
@@ -404,7 +445,7 @@ pub async fn get_stat_year(
 
 pub async fn get_stat_quarter(
     _claims: Claims, 
-    State(data): State<Arc<AppState>>
+    State(state): State<Arc<AppState>>
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query(r#"
         select cast(quarter as text), cast(sum(quantity) as text), cast(sum(price) as text)
@@ -418,9 +459,9 @@ pub async fn get_stat_quarter(
                 ,price
                 from public.pyme
             ) as t
-        group by quarter order by quarter
+        group by quarter order by quarter desc
         "#)
-        .fetch_all(&data.db).await; 
+        .fetch_all(&state.db).await; 
 
     match query {
         Ok(records) => {

@@ -17,14 +17,17 @@ pub struct CreateItemSchema {
     pub quantity: i32,
     pub price: i32,
     pub paid: bool,
+    pub notes: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateItemSchema {
+    pub id: i32,
     pub date: Option<String>,
     pub customer: Option<String>,
     pub product: Option<String>,
     pub quantity: Option<i32>,
     pub price: Option<i32>,    
     pub paid: Option<bool>,
+    pub notes: Option<String>,
 }

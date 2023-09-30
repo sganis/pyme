@@ -59,10 +59,6 @@
         class="btn btn-success  btn-width" on:click={showCreate}>
         New
     </button>
-    <button class="btn btn-danger" type="button" disabled
-        on:click={showRemove}>
-        <i class="bi-trash3"/>
-    </button>
 </div>
 <br>
 {/if}
@@ -85,7 +81,7 @@
             </thead>
             <tbody>
             {#each items as o, i}
-            <tr>
+            <tr class="clickable" on:click={()=>showModify(o)}>
                 {#each table.columns as col}
                 <td>{ o[col] || ""}</td>
                 {/each}
@@ -116,5 +112,8 @@
     .bi-app {
         content: "\2122";
         color: transparent !important;
+    }
+    .clickable {
+        cursor: pointer;
     }
 </style>

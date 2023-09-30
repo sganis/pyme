@@ -16,14 +16,14 @@
   import Logout from './routes/Logout.svelte';
   import Error from './lib/Error.svelte';
   import Working from './lib/Working.svelte';
-  import ItemForm from './lib/ItemForm.svelte';
+  import Stats from './routes/Stats.svelte';
   
   
   const routes = {
       '/': Home,
       '/login': Login,
       '/logout': Logout,
-      '/add': ItemForm,
+      '/stats': Stats,
 
       // Catch-all
       '*': NotFound,
