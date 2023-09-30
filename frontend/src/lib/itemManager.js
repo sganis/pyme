@@ -1,4 +1,5 @@
 import { get } from "svelte/store";
+import { push } from "svelte-spa-router";
 import { working, state, apierror } from "./store";
 
 export default class ItemManager {
@@ -27,13 +28,19 @@ export default class ItemManager {
 
       if (r.status !== 200) {
         this.error = j.detail;
-        apierror.set(this.error);
-        if (this.error === "Invalid token") {
-          state.set({});
+        let token = get(state).token;
+        if (!token || this.error === "Invalid token") {
+          state.set({ username: "", token: "" });
+          apierror.set("");
+          this.error = "";
+          localStorage.removeItem("state");
+          push("/login");
         }
+
+        apierror.set(this.error);
         console.log("url:", this.url);
         console.log(
-          `searching: ${this.searchText} sortcol: ${this.sortCol} desc: ${this.sortDesc}`
+          `searching text: ${this.searchText} sortcol: ${this.sortCol} desc: ${this.sortDesc}`
         );
         console.log("error:", this.error);
       } else {

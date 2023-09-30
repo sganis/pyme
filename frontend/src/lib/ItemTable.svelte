@@ -7,9 +7,10 @@
     export let sortCol;
     export let sortDesc;
     export let items;
+    export let showToolbar;
 
     let searchText;
-
+    
     const searchLater = () => {
         dispatch('searchLater', searchText);
     }
@@ -39,6 +40,8 @@
     </div>
 </div>
 <br>
+
+{#if showToolbar}
 <div class="d-flex justify-content-center gap-2">
     <input class="form-control" 
             type="text" placeholder="Search..."
@@ -61,10 +64,8 @@
         <i class="bi-trash3"/>
     </button>
 </div>
-
-
 <br>
-
+{/if}
 
 <div class="row">
     <div class="table-responsive">

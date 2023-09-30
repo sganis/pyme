@@ -7,10 +7,16 @@
     import AutoComplete from "simple-svelte-autocomplete"
     import dayjs from 'dayjs';
     import * as yup from "yup";
-    import { API_URL, working, state } from '../lib/store';
-    import Error from '../lib/Error.svelte';
-    import ItemManager from '../lib/itemManager';
+    import { API_URL, working, state } from './store';
+    import Error from './Error.svelte';
+    import ItemManager from './itemManager';
+    import { createEventDispatcher } from 'svelte';
+	const dispatch = createEventDispatcher()
 
+    const close = (e) => {
+        e.preventDefault();
+        dispatch('close');
+    }
 
     let url = `${API_URL}pyme/`
     let error;
@@ -29,6 +35,7 @@
         product: '',
         quantity: 1,
         price: 0,
+        paid: true,
         
     }
 
@@ -54,6 +61,7 @@
     const handleSubmit = async () => {
         item.customer = currentCustomer;
         item.quantity = Number.parseInt(item.quantity);
+		item.price = Number.parseInt(item.price);
 		try {
 			await schema.validate(item, { abortEarly: false });
 			errors = {};
@@ -99,7 +107,6 @@
         let itemToSave = JSON.parse(JSON.stringify(item))
         // convert date to string
         itemToSave.date = dayjs(item.date).format('YYYY-MM-DD');
-        itemToSave.checkout = dayjs(item.checkout).format('YYYY-MM-DD');
         console.log('saving item:', itemToSave);
         if(!isModify) {
             console.log('creating item');
@@ -127,20 +134,7 @@
     {#if Object.keys(errors).length > 0}
         <Error message={`Check errors: [${Object.keys(errors).toString()}]`} />
     {/if}
-    <div class="row text-end">
-        <div class="col">
-            <button class="btn btn-light" 
-                on:click={()=>push('/')}
-                disabled={$working}>
-                Cancel
-            </button>
-            <button class="btn btn-success"
-                on:click={handleSubmit}
-                disabled={$working}>
-                Add Item
-            </button>
-        </div>
-    </div>
+
     <form on:submit|preventDefault={handleSubmit}  
         class="needs-validation" novalidate>
     <div class="row">
@@ -177,8 +171,8 @@
             {#if errors.customer}<small class="error">{errors.customer}</small>{/if}
            
        </div>
-   </div>
-   <div class="row">
+    </div>
+    <div class="row align-items-center">
         <div class="col">
             <label for="id" class="form-label text-nowrap">Product</label>
             <select  disabled={$working}
@@ -207,13 +201,41 @@
         </div>
         <div class="col">
             <label for="price" class="form-label">Price</label>
-            <input type="number" 
+            <input type="text" pattern="\d*" 
                 disabled={$working}
                 bind:value={item.price}
                 class="form-control" id="price">
             {#if errors.price}<small class="error">{errors.price}</small>{/if}
         </div>  
+        <div class="col">
+            <div class="form-check mt-4">
+                <input class="form-check-input" type="checkbox" 
+                bind:checked={item.paid} disabled={$working} id="paid">
+                <label class="form-check-label" for="paid">
+                  Paid
+                </label>
+              </div>
+            {#if errors.price}<small class="error">{errors.price}</small>{/if}
+        </div>  
     </div>
+    <br>
+    <div class="row text-end">
+        <div class="col">
+            <button class="btn btn-light w-100" 
+                on:click={close}
+                disabled={$working}>
+                Close
+            </button>
+        </div>
+        <div class="col">
+            <button class="btn btn-success w-100"
+                on:click={handleSubmit}
+                disabled={$working}>
+                Save
+            </button>
+        </div>
+    </div>
+    
 </form>
 </div>
 

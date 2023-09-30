@@ -16,7 +16,7 @@
   import Logout from './routes/Logout.svelte';
   import Error from './lib/Error.svelte';
   import Working from './lib/Working.svelte';
-  import ItemForm from './routes/ItemForm.svelte';
+  import ItemForm from './lib/ItemForm.svelte';
   
   
   const routes = {
@@ -32,28 +32,18 @@
 
 </script>
 
-<nav class="navbar navbar-expand-sm navbar-light bg-light">
+<nav class="navbar navbar-expand navbar-light bg-light">
   <div class="container-fluid">
     <a class="navbar-brand" href="/">
       <img src="/favicon.svg" alt="logo" width="32" />
       &nbsp;
       Pyme</a>
-      <Working message="" />
-    <button class="navbar-toggler" type="button" 
-      data-bs-toggle="collapse" data-bs-target="#navbarNav" 
-      aria-controls="navbarNav" aria-expanded="false" 
-      aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button>
+    <Working message="" />
+    
     <div class="collapse navbar-collapse" id="navbarNav">
       <ul class="navbar-nav justify-content-end ms-auto">
         {#if $state?.username }
-        <li class="nav-item">
-          <a class="nav-link" href="/add" use:link use:active>
-            Add
-          </a>
-        </li>
-        <li class="nav-item">
+       <li class="nav-item">
           <a class="nav-link" href="/stats" use:link use:active>
            Stats
           </a>

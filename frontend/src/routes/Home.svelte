@@ -1,10 +1,10 @@
 <script>
     import { onMount } from 'svelte';
     import { push } from 'svelte-spa-router';
-    import { API_URL, state } from '../lib/store';
+    import { API_URL, state, apierror } from '../lib/store';
     import ItemsTable from '../lib/ItemTable.svelte';
     import ItemManager from "../lib/itemManager.js"
-    
+    import ItemForm from '../lib/ItemForm.svelte';
     
     let url = `${API_URL}pyme/`
     let isModal;
@@ -13,10 +13,12 @@
     let sortCol = 'id';
     let sortDesc = true;
     let manager;
+    let showForm = false;
+    let showToolbar = true;
 
     let title = "Items";
     let table = {
-        header : ['Date','Customer','Qty','Prod','Price'],
+        header : ['Date','Cust','Qty','Prod','Price'],
         columns : ['date','customer','quantity','product','price'],
     }
     let itemInit  = {
@@ -35,10 +37,6 @@
   
     onMount(async () => {
         console.log('mouning home, state:', JSON.stringify($state));
-        if (!$state.token) {
-            push('/login');
-            return;
-        }    
         console.log(url);
         if (manager===undefined)
             manager = new ItemManager(url);
@@ -46,13 +44,11 @@
         error = manager.error;
         items = manager.result;       
     });
-
     const refresh = async () => {
         await manager.search();
         error = manager.error;
         items = manager.result;
-    }
-    
+    } 
     const searchLater = async (e) => {
         const searchText = e.detail;
         manager.searchText = searchText
@@ -69,8 +65,6 @@
             }, waitTime);
         }
     }
- 
-
     const save = async () => {
         console.log('saving item:', item);
         if(!isModify) {
@@ -86,7 +80,6 @@
             isModal = false;
         }
     }
-
     const remove = async () => {
         await manager.remove(item.id);
         error = manager.error;
@@ -94,7 +87,6 @@
         isModal = false;
         isRemove = false;
     }
-
     const sort = async (e) => {
         let col = e.detail;
         if (col === manager.sortCol) {
@@ -109,16 +101,13 @@
         error = manager.error;
         items = manager.result;
     }
-
     const showCreate = () => {
         item = {...itemInit};
-        isModal = true;
+        showForm = true;
+        showToolbar = false;
         isModify = false;
-
         error = '';
     }
-
-
     const showModify = (e) => {
         let o = e.detail;
         item = {...o};
@@ -126,7 +115,6 @@
         isModal = true;
         error = '';
     }
-
     const showRemove = (e) => {
         let o = e.detail;
         item = {...o};
@@ -134,14 +122,13 @@
         isModal = true;
         error = '';
     }
-
-    const cancel = () => {
+    const closeForm = () => {
         isRemove = false;
-        isModal = false;
+        showForm = false;
+        showToolbar = true;
         isModify = false;
         error = '';
     }
-
 </script>
 
 <svelte:head>
@@ -150,12 +137,23 @@
 
 <div class="row ms-1">
   Mode: {import.meta.env.MODE},   API: {import.meta.env.VITE_PUBLIC_BASE_URL}<br>
-  User: {$state?.username || ""}, Token: {$state?.token.substr($state?.token.length-10,10)}
+  User: {$state?.username || ""}, Token: {$state?.token?.substr($state?.token.length-10,10)}
 </div>
+<br>
+
+{#if showForm}
+
+<div class="row bg-light border-bottom">
+    <div class="col h2">Item:</div>
+</div>
+<ItemForm on:close={closeForm}/>
+{/if}
+
 <br>
 
 <ItemsTable 
     {title}
+    {showToolbar}
     {items} 
     {table} 
     {sortCol} 
