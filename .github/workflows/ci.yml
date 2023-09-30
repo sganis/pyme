@@ -12,14 +12,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Setup nodejs
-        uses: actions/setup-node@v3
-        with:
-          node-version: "18.x"
-      - name: Install dependencies
-        run: npm ci  --prefix ./frontend
-      - name: Build frontend
-        run: npm run build --prefix ./frontend
+      # - name: Setup nodejs
+      #   uses: actions/setup-node@v3
+      #   with:
+      #     node-version: "18.x"
+      # - name: Install dependencies
+      #   run: npm ci  --prefix ./frontend
+      # - name: Build frontend
+      #   run: npm run build --prefix ./frontend
       # - name: Build backend
       #   run: cargo build --release
       #   working-directory: rs
@@ -30,6 +30,7 @@ jobs:
         uses: shuttle-hq/deploy-action@main
         with:
           deploy-key: ${{ secrets.SHUTTLE_DEPLOY_KEY }}
+          # allow-dirty: true
           # working-directory: rs
           # name: pyme
           # no-test: true
