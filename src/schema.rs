@@ -9,15 +9,23 @@ pub struct Params {
     pub desc: Option<bool>,
 }
 
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ItemSchema {
+    pub product: String,
+    pub quantity: i32,
+    pub price: i32,
+}
+
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CreateItemSchema {
     pub date: String,
     pub customer: String,
-    pub product: String,
-    pub quantity: i32,
     pub price: i32,
     pub paid: bool,
     pub notes: String,
+    pub items: Vec<ItemSchema>
 }
 
 #[derive(Serialize, Deserialize, Debug)]

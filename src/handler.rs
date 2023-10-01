@@ -15,7 +15,7 @@ use axum::{
 };
 use crate::{
     auth::{Claims, AuthPayload, AuthError, KEYS},
-    model::ItemModel,
+    model::{OrderModel,ItemModel},
     schema::{Params, CreateItemSchema, UpdateItemSchema},
     AppState,    
 };
@@ -30,19 +30,6 @@ pub async fn token(
     if payload.username.is_empty() || payload.password.is_empty() {
         return Err(AuthError::MissingCredentials);
     }
-
-    // get the user for the email from database
-    // let user = sqlx::query_as::<_, models::auth::User>(
-    //     "SELECT username, password FROM users where email = $1",
-    // )
-    // .bind(&payload.email)
-    // .fetch_optional(&pool)
-    // .await
-    // .map_err(|err| {
-    //     dbg!(err);
-    //     AuthError::InternalServerError
-    // })?;
-
     // if password is encrypted than decode it first before comparing
     if payload.username != "alice" || payload.password != "secret" {
         // password is incorrect
@@ -78,7 +65,7 @@ pub async fn get_items(
     let limit = params.limit.unwrap_or(50);
     let offset = (params.page.unwrap_or(1) - 1) * limit;  
 
-    let mut query = QueryBuilder::new("SELECT * from pyme");
+    let mut query = QueryBuilder::new("SELECT * from pyme_order");
     if q.len() > 0 {
         query.push(" where customer ilike ");
         query.push_bind(format!("%{}%", q));
@@ -90,11 +77,12 @@ pub async fn get_items(
     } else {
         query.push(" asc");
     }
+    query.push(", id desc ");
     query.push(" limit ");
     query.push_bind(limit);
     query.push(" offset ");
     query.push_bind(offset);
-    let query = query.build_query_as::<ItemModel>();    
+    let query = query.build_query_as::<OrderModel>();    
     println!("{}", query.sql());
     println!("q={} sortcol={} desc={} limit={} offset={}", q,sortcol,desc,limit,offset);
 
@@ -121,8 +109,8 @@ pub async fn get_item(
     State(state): State<Arc<AppState>>
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     println!("id={}", id);
-    let query = sqlx::query_as::<_, ItemModel>(r#"
-        SELECT * FROM pyme WHERE id = $1
+    let query = sqlx::query_as::<_, OrderModel>(r#"
+        SELECT * FROM pyme_order WHERE id = $1
         "#)
         .bind(id)
         .fetch_one(&state.db).await;
@@ -146,41 +134,50 @@ pub async fn create_item(
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateItemSchema>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let query = sqlx::query_as::<_,ItemModel>(
-        "INSERT INTO pyme (date,customer,product,quantity,price,paid, notes) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *")
+    let query = sqlx::query_as::<_,OrderModel>(
+        "INSERT INTO pyme_order (date,customer,price,paid, notes) 
+            VALUES ($1, $2, $3, $4, $5) RETURNING *")
         .bind(body.date.to_string())
         .bind(body.customer.to_string())
-        .bind(body.product.to_string())
-        .bind(body.quantity)
         .bind(body.price)
         .bind(body.paid)
         .bind(body.notes)
         .fetch_one(&state.db)
         .await;
 
-    match query {
-        Ok(item) => {
-            let res = json!(item);
-            return Ok((StatusCode::CREATED, Json(res)));
-        }
-        Err(e) => {
-            if e.to_string()
-                .contains("duplicate key value violates unique constraint")
-            {
-                let error = json!({
-                    "detail": "Item with that title already exists",
-                });
-                println!("{:?}", e);
-                return Err((StatusCode::CONFLICT, Json(error)));
-            }
+    if let Err(e) = query {
+        if e.to_string()
+            .contains("duplicate key value violates unique constraint")
+        {
+            let error = json!({
+                "detail": "Item with that title already exists",
+            });
             println!("{:?}", e);
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"status": "error","message": format!("{:?}", e)})),
-            ));
+            return Err((StatusCode::CONFLICT, Json(error)));
+        }
+        println!("{:?}", e);
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"status": "error","message": format!("{:?}", e)})),
+        ));
+    }
+    let item = query.unwrap();
+
+    for i in body.items.into_iter() {
+        let query = sqlx::query_as::<_,ItemModel>(
+            "INSERT INTO pyme_order_item (order_id,product,quantity) 
+                VALUES ($1, $2, $3) RETURNING *")
+            .bind(item.id)
+            .bind(i.product)
+            .bind(i.quantity)
+            .fetch_one(&state.db)
+            .await;
+        if let Err(e) = query {
+            let error = json!({"status": "error","message": format!("{:?}", e)});
+            return Err((StatusCode::INTERNAL_SERVER_ERROR,Json(error)));                    
         }
     }
+    Ok(Json(serde_json::json!(item)))
 }
 
 pub async fn update_item(
@@ -189,7 +186,7 @@ pub async fn update_item(
     Json(body): Json<UpdateItemSchema>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     
-    let query = sqlx::query_as::<_, ItemModel>(
+    let query = sqlx::query_as::<_, OrderModel>(
         "SELECT * FROM pyme WHERE id = $1")
         .bind(body.id)
         .fetch_one(&state.db)
@@ -205,15 +202,13 @@ pub async fn update_item(
 
     let item = query.unwrap();
 
-    let query = sqlx::query_as::<_, ItemModel>(
-        "UPDATE pyme SET date=$1, customer=$2, product=$3, 
-            quantity=$4, price=$5, paid=$6, notes=$7 
+    let query = sqlx::query_as::<_, OrderModel>(
+        "UPDATE pyme_order SET date=$1, customer=$2, 
+            price=$5, paid=$6, notes=$7 
             WHERE id=$8 RETURNING *")
         .bind(body.date.to_owned().unwrap_or(item.date))
         .bind(body.customer.to_owned().unwrap_or(item.customer))
-        .bind(body.product.to_owned().unwrap_or(item.product))
-        .bind(body.quantity.to_owned().unwrap_or(item.quantity))
-        .bind(body.price.to_owned().unwrap_or(item.quantity))
+        .bind(body.price.to_owned().unwrap_or(item.price))
         .bind(body.paid.to_owned().unwrap_or(item.paid))
         .bind(body.notes.to_owned().unwrap_or(item.notes.unwrap_or("".to_string())))
         .bind(body.id)
@@ -239,7 +234,7 @@ pub async fn delete_item(
     Path(id): Path<i32>,  
     State(state): State<Arc<AppState>>
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let rows_affected = sqlx::query("DELETE FROM pyme  WHERE id = $1")
+    let rows_affected = sqlx::query("DELETE FROM pyme_order  WHERE id = $1")
         .bind(id)
         .execute(&state.db)
         .await
@@ -270,13 +265,13 @@ pub async fn get_customers(
 
     if letters.len() > 0 {
         query = sqlx::query(r#"
-            SELECT DISTINCT customer FROM pyme 
+            SELECT DISTINCT customer FROM pyme_order
             WHERE customer ilike $1 
             ORDER BY customer
             "#).bind(format!("%{}%", letters));
     } else {
         query = sqlx::query(r#"
-            SELECT DISTINCT customer FROM pyme ORDER BY customer
+            SELECT DISTINCT customer FROM pyme_order ORDER BY customer
             "#);
     }
     let query = query.fetch_all(&state.db).await; 
@@ -304,7 +299,7 @@ pub async fn get_products(
     State(state): State<Arc<AppState>>
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query(r#"
-        select name, cast(price as text) as price from pymeproduct order by name
+        select name, cast(price as text) as price from pyme_product order by name
         "#)
         .fetch_all(&state.db).await; 
 
@@ -341,7 +336,7 @@ pub async fn get_stat_customer(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query(r#"
         select customer, cast(sum(quantity) as text), cast(sum(price) as text)
-        from public.pyme
+        from public.pyme_order
         group by customer 
         order by sum(price) desc
         "#)
@@ -374,7 +369,7 @@ pub async fn get_stat_product(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query(r#"
         select product, cast(sum(quantity) as text), cast(sum(price) as text) 
-        from public.pyme
+        from public.pyme_order
         group by product 
         order by sum(price) desc
         "#)
@@ -415,7 +410,7 @@ pub async fn get_stat_year(
                 ,product
                 ,quantity
                 ,price
-                from public.pyme
+                from public.pyme_order
             ) as t
         group by year order by year desc
         "#)
@@ -457,7 +452,7 @@ pub async fn get_stat_quarter(
                 ,product
                 ,quantity
                 ,price
-                from public.pyme
+                from public.pyme_order
             ) as t
         group by quarter order by quarter desc
         "#)

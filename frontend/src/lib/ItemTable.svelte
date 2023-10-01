@@ -76,7 +76,7 @@
                         <i class:bi-app="{sortCol !== col}"/>  
                     </th>
                     {/each}
-                    <th>Actions</th>
+                    <!-- <th>Actions</th> -->
                 </tr>
             </thead>
             <tbody>
@@ -85,7 +85,7 @@
                 {#each table.columns as col}
                 <td>{ o[col] || ""}</td>
                 {/each}
-                <td class="text-nowrap text-end">
+                <!-- <td class="text-nowrap text-end">
                     <button class="btn btn-light btn-sm btn-width-sm" type="button" 
                         on:click={() => showModify(o)}>
                         <i class="bi-pencil"/>
@@ -94,7 +94,7 @@
                         on:click={() => showRemove(o)}>
                         <i class="bi-trash3"/>
                     </button>
-                </td>            
+                </td>             -->
             </tr>    
             {/each} 
             </tbody>

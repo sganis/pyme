@@ -5,7 +5,7 @@
     import { API_URL, state, apierror } from '../lib/store';
     import ItemsTable from '../lib/ItemTable.svelte';
     import ItemManager from "../lib/itemManager.js"
-    import ItemForm from '../lib/ItemForm.svelte';
+    import Order from '../lib/Order.svelte';
     
     let url = `${API_URL}pyme/`
     let isModal;
@@ -20,18 +20,22 @@
 
     let title = "Items";
     let table = {
-        header : ['Date','Cust','Qty','Prod','Price', 'Paid'],
-        columns : ['date','customer','quantity','product','price','paid'],
+        header : ['Date','Cust','Total', 'Paid'],
+        columns : ['date','customer','price','paid'],
     }
     let itemInit = {
         date: today,
         customer: '',
-        product: 'A',
-        quantity: 1,
         price: 0,
         paid: true,
+        notes: '',
+        items : [{
+            product: 'A',
+            quantity: 1,
+            price: 0,
+        }]        
     }
-    let item = {...itemInit}
+    let order = {...itemInit}
 
     let items = [];
     let error = '';
@@ -68,28 +72,6 @@
             }, waitTime);
         }
     }
-    const save = async () => {
-        console.log('saving item:', item);
-        if(!isModify) {
-            console.log('creating item');
-            await manager.create(item);
-        } else {
-            console.log('updating item');
-            await manager.modify(item);
-        }
-        error = manager.error;
-        items = manager.result;
-        if (!error) {
-            isModal = false;
-        }
-    }
-    const remove = async () => {
-        await manager.remove(item.id);
-        error = manager.error;
-        items = manager.result;
-        isModal = false;
-        isRemove = false;
-    }
     const sort = async (e) => {
         let col = e.detail;
         if (col === manager.sortCol) {
@@ -105,7 +87,7 @@
         items = manager.result;
     }
     const showCreate = () => {
-        item = {...itemInit};
+        order = {...itemInit};
         showForm = true;
         showToolbar = false;
         isModify = false;
@@ -114,7 +96,7 @@
     const showModify = (e) => {
         let o = e.detail;
         o.date = dayjs(o.date).toDate();
-        item = {...o};
+        order = {...o};
         showForm = true;
         showToolbar = false;
         isModify = true;
@@ -122,7 +104,7 @@
     }
     const showRemove = (e) => {
         let o = e.detail;
-        item = {...o};
+        order = {...o};
         isRemove = true; 
         isModal = true;
         error = '';
@@ -147,12 +129,11 @@
 <br>
 
 {#if showForm}
-
-<div class="row bg-light border-bottom">
-    <div class="col h2">Item:</div>
-</div>
-<ItemForm {item} {isModify} on:close={closeForm} on:saved={refresh}/>
-{/if}
+    <div class="row bg-light border-bottom">
+        <div class="col h2">Item:</div>
+    </div>
+    <Order {order} {isModify} on:close={closeForm} on:saved={refresh}/>
+    {/if}
 
 <br>
 

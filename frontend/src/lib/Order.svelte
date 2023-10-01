@@ -11,6 +11,7 @@
     import Error from './Error.svelte';
     import ItemManager from './itemManager';
     import { createEventDispatcher } from 'svelte';
+    import OrderItem from './OrderItem.svelte';
 	const dispatch = createEventDispatcher()
 
     const close = (e) => {
@@ -30,13 +31,18 @@
     let currentProduct;
 
     export let isModify;
-    export let item = {
+    
+    export let order = {
         date: today,
         customer: '',
-        product: 'A',
-        quantity: 1,
         price: 0,
         paid: true,
+        notes: '',
+        items : [{
+            product: 'A',
+            quantity: 1,
+            price: 0,
+        }]
         
     }
 
@@ -48,39 +54,46 @@
             .typeError("Invalid date")
             .required("Required"),
         customer: yup.string().required("Required"), 
-        product: yup.string().required("Required"),
-        quantity: yup.number().required("Required"),
         price: yup.number().required("Required"),    
+        items: yup.array().of(
+            yup.object().shape({
+                product: yup.string().required("Required"),
+                quantity: yup.number().required("Required"),
+                price: yup.number().required("Required"),    
+            })
+        ),
     });    
     
     onMount(async () => {
         if (!manager)
             manager = new ItemManager(url);
         products = await getProducts();
-        updatePrice();
         errors = {}
 	});
 
     const handleSubmit = async () => {
-        item.customer = currentCustomer;
-        item.quantity = Number.parseInt(item.quantity);
-		item.price = Number.parseInt(item.price);
+        order.customer = currentCustomer;
+        for (let item of order.items) {
+            item.quantity = Number.parseInt(item.quantity);
+		    item.price = Number.parseInt(item.price);
+        }
 		try {
-			await schema.validate(item, { abortEarly: false });
+			await schema.validate(order, { abortEarly: false });
 			errors = {};
             await save();
 		} catch (err) {
+            console.log(err);
             errors = extractErrors(err);
             //console.log(errors);           
 		}
 
     }
     const extractErrors = (err) => {
+        console.log(JSON.stringify(err));
 		return err.inner.reduce((acc, err) => {
 			return { ...acc, [err.path]: err.message };
 		}, {});
 	}
-
     const getCustomer = async (q) => {
         if (q.length < 1){
             customers = [];
@@ -125,9 +138,9 @@
         return [];
     } 
     const save = async () => {
-        let itemToSave = JSON.parse(JSON.stringify(item))
+        let itemToSave = JSON.parse(JSON.stringify(order))
         // convert date to string
-        itemToSave.date = dayjs(item.date).format('YYYY-MM-DD');
+        itemToSave.date = dayjs(order.date).format('YYYY-MM-DD');
         console.log('saving item:', itemToSave);
         if(!isModify) {
             console.log('creating item');
@@ -139,25 +152,47 @@
         error = manager.error;
         dispatch('saved');
     }
-
-    const remove = async () => {
-
-    }
     const handleCreate = (username) => {
         console.log('adding ', username);
         customers.unshift(username);
         customers = customers;
         return username;
     }
-    const updatePrice = () => {
-        console.log('updating price...');
+    const updatePrice = (e) => {
+        const index = e.detail;
+        console.log('updating price item', index);
+        let item = order.items[index];
         for (const p of products) {
-            if (p[0]===item.product) {
+            if (p[0]===item.product) {                
                 item.price = item.quantity * Number(p[1]);
-                break;
+                console.log("price", item.price);
+                order.item = {...item};
+                break;                                
             }
         }
+        updateTotal();
     }
+    const updateTotal = () => {
+        console.log('updating total...');
+        let sum = 0;
+        order.items.forEach( i => {
+            sum += i.price;
+        });
+        order.price = sum;
+    }
+    const addItem = async () => {
+        order.items.push({
+            product: 'A',
+            quantity: 1,
+            price: 0,
+        });
+        order.items = [...order.items];
+    }
+    const removeItem = async (index) => {
+        order.items.splice(index, 1);
+        order.items = [...order.items];
+    }
+
 </script>
 
 <div class="container">
@@ -176,7 +211,7 @@
                 Date
             </label>
             <DateInput
-                bind:value={item.date} 
+                bind:value={order.date} 
                 closeOnSelection={true}
                 format="dd/MM/yyyy"
                 visible={false}
@@ -195,7 +230,7 @@
                 inputClassName="form-control"
                 searchFunction={getCustomer}
                 delay="200"
-                bind:selectedItem={item.customer}
+                bind:selectedItem={order.customer}
                 bind:text={currentCustomer}
                 create={true}
                 createText={"Item doesn't exist, create one?"} 
@@ -205,59 +240,54 @@
            
        </div>
     </div>
-    <div class="row align-items-center">
-        <div class="col">
-            <label for="id" class="form-label text-nowrap">Product</label>
-            <select  disabled={$working}
-                class="form-select"                
-                bind:value={item.product}
-                on:change={updatePrice}>    
-                {#each products as p}            
-                    <option value={p[0]}>{p[0]} ({p[1]})</option>
-                {/each}
-            </select>
-            {#if errors.product}<small class="error">{errors.product}</small>{/if}
-         </div>
-        <div class="col">
-            <label for="quantity" class="form-label">Units</label>
-            <input type="text" pattern="\d*" 
-                disabled={$working}
-                bind:value={item.quantity}
-                on:change={updatePrice}                        
-                class="form-control" id="quantity"
-                    min="1" max="100">
-            {#if errors.quantity}<small class="error">{errors.quantity}</small>{/if}
 
-        </div>
+    {#each order.items as item, index}
+        <OrderItem {products} {item} hasLabels={index===0} {index}
+            on:removeItem={removeItem}
+            on:updatePrice={updatePrice}
+            on:updateTotal={updateTotal}
+        />
+    {/each}
+
+    <div class="row">
         <div class="col">
-            <label for="price" class="form-label">Price</label>
+            <button class="btn btn-light mt-4" id="plus" 
+                on:click|preventDefault={addItem}>
+                <i class="bi-plus-lg"/>        
+            </button>
+        </div>  
+        <div class="col">            
+            <label for="price" class="form-label">Total Price</label>
             <input type="text" pattern="\d*" 
                 disabled={$working}
-                bind:value={item.price}
-                class="form-control" id="price">
-            {#if errors.price}<small class="error">{errors.price}</small>{/if}
+                bind:value={order.price}
+                class="form-control" id="price"
+                min="1" max="10000">
         </div>  
+    </div>
+    
+    <div class="row">
+        <div class="col"></div>
         <div class="col">
-            <div class="form-check mt-4">
+            <div class="form-check">
                 <input class="form-check-input" type="checkbox" 
-                bind:checked={item.paid} disabled={$working} id="paid">
+                bind:checked={order.paid} disabled={$working} id="paid">
                 <label class="form-check-label" for="paid">
                   Paid
                 </label>
-              </div>
-            {#if errors.price}<small class="error">{errors.price}</small>{/if}
+            </div>
         </div>  
     </div>
+    
     <div class="row">
         <div class="col">
             <label for="notes" class="form-label">Notes</label>
             <input type="text"
                 disabled={$working}
-                bind:value={item.notes}
+                bind:value={order.notes}
                 class="form-control" id="notes">
         </div>  
     </div>
-    <br>
     <div class="row text-end">
         <div class="col">
             {#if isModify}
@@ -285,8 +315,6 @@
             </button>
         </div>
     </div>
-    
-    
 </form>
 </div>
 
