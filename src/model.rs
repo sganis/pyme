@@ -20,7 +20,8 @@ pub struct OrderModel {
 pub struct ItemModel {
     pub order_id: i32,
     pub product: String,
-    pub quantity: i32
+    pub quantity: i32,
+    pub price: i32
 }
 
 #[derive(Debug, FromRow, Deserialize, Serialize)]

@@ -11,15 +11,10 @@ use axum::{
     headers::{authorization::Bearer, Authorization},
     TypedHeader,
 };
-
 use axum::http::{
     request::Parts, 
     StatusCode, 
 };
-// use axum_extra::{
-//     headers::{authorization::Bearer, Authorization},
-//     TypedHeader,
-// };
 
 
 #[derive(Deserialize, sqlx::FromRow)]

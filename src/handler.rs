@@ -16,7 +16,7 @@ use axum::{
 use crate::{
     auth::{Claims, AuthPayload, AuthError, KEYS},
     model::{OrderModel,ItemModel},
-    schema::{Params, CreateItemSchema, UpdateItemSchema},
+    schema::{Params, OrderSchema, CreateOrderSchema},
     AppState,    
 };
 
@@ -115,24 +115,38 @@ pub async fn get_item(
         .bind(id)
         .fetch_one(&state.db).await;
 
-    match query {
-        Ok(item) => {
-            return Ok(Json(json!(item)));
-        }
-        Err(e) => {
-            println!("error: {:?}", e);
-            let error = json!({
-                "detail": format!("Item with ID: {} not found", id)
-            });
-            return Err((StatusCode::NOT_FOUND, Json(error)));
-        }
+    if let Err(e) = query {
+        println!("error: {:?}", e);
+        let error = json!({
+            "detail": format!("Item with ID: {} not found", id)
+        });
+        return Err((StatusCode::NOT_FOUND, Json(error)));
     }
+    
+    let order = query.unwrap();
+    let query = sqlx::query_as::<_, ItemModel>(r#"
+        SELECT * FROM pyme_order_item WHERE order_id = $1
+        "#)
+        .bind(order.id)
+        .fetch_all(&state.db).await;
+
+    if let Err(e) = query {
+        println!("error: {:?}", e);
+        let error = json!({
+            "detail": format!("Items for order {} not found", id)
+        });
+        return Err((StatusCode::NOT_FOUND, Json(error)));
+    }
+    let mut order = json!(order);
+    let items = json!(query.unwrap());
+    order["items"] = items;
+    Ok(Json(order))
 }
 
 pub async fn create_item(
     _claims: Claims,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<CreateItemSchema>,
+    Json(body): Json<CreateOrderSchema>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query_as::<_,OrderModel>(
         "INSERT INTO pyme_order (date,customer,price,paid, notes) 
@@ -161,72 +175,113 @@ pub async fn create_item(
             Json(json!({"status": "error","message": format!("{:?}", e)})),
         ));
     }
-    let item = query.unwrap();
+    let order = query.unwrap();
+    let mut items = Vec::<ItemModel>::new();
 
     for i in body.items.into_iter() {
         let query = sqlx::query_as::<_,ItemModel>(
-            "INSERT INTO pyme_order_item (order_id,product,quantity) 
-                VALUES ($1, $2, $3) RETURNING *")
-            .bind(item.id)
+            "INSERT INTO pyme_order_item (order_id,product,quantity,price) 
+                VALUES ($1, $2, $3, $4) RETURNING *")
+            .bind(order.id)
             .bind(i.product)
             .bind(i.quantity)
+            .bind(i.price)
             .fetch_one(&state.db)
             .await;
         if let Err(e) = query {
             let error = json!({"status": "error","message": format!("{:?}", e)});
             return Err((StatusCode::INTERNAL_SERVER_ERROR,Json(error)));                    
         }
+        items.push(query.unwrap());
     }
-    Ok(Json(serde_json::json!(item)))
+    let mut order = json!(order);
+    order["items"] = json!(items);
+    Ok(Json(order)) 
 }
 
 pub async fn update_item(
     _claims: Claims, 
     State(state): State<Arc<AppState>>,
-    Json(body): Json<UpdateItemSchema>,
+    Json(body): Json<OrderSchema>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     
     let query = sqlx::query_as::<_, OrderModel>(
-        "SELECT * FROM pyme WHERE id = $1")
+        "SELECT * FROM pyme_order WHERE id = $1")
         .bind(body.id)
         .fetch_one(&state.db)
         .await;
 
-    if query.is_err() {
-        let error = json!({
-            "datail": format!("Item with ID: {} not found", body.id)
-        });
-        println!("{:?}", query);
-        return Err((StatusCode::NOT_FOUND, Json(error)));
+    if let Err(e) = query {
+        println!("{:?}", e);
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(json!({"datail": format!("Item with ID: {} not found", body.id)}))
+        ));
     }
 
-    let item = query.unwrap();
+    let order = query.unwrap();
+
+    println!("{:?}", body);
 
     let query = sqlx::query_as::<_, OrderModel>(
         "UPDATE pyme_order SET date=$1, customer=$2, 
-            price=$5, paid=$6, notes=$7 
-            WHERE id=$8 RETURNING *")
-        .bind(body.date.to_owned().unwrap_or(item.date))
-        .bind(body.customer.to_owned().unwrap_or(item.customer))
-        .bind(body.price.to_owned().unwrap_or(item.price))
-        .bind(body.paid.to_owned().unwrap_or(item.paid))
-        .bind(body.notes.to_owned().unwrap_or(item.notes.unwrap_or("".to_string())))
+            price=$3, paid=$4, notes=$5 
+            WHERE id=$6 RETURNING *")
+        .bind(body.date.unwrap_or(order.date.clone()))
+        .bind(body.customer.unwrap_or(order.customer.clone()))
+        .bind(body.price.unwrap_or(order.price))
+        .bind(body.paid.unwrap_or(order.paid))
+        .bind(body.notes.unwrap_or(order.notes.clone().unwrap_or("".to_string())))
         .bind(body.id)
         .fetch_one(&state.db)
         .await;
+    
+    if let Err(e) = query {
+        println!("{:?}", e);
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"detail": format!("{:?}", e)})),
+        ));
+    }
 
-    match query {
-        Ok(item) => {
-            return Ok(Json(serde_json::json!(item)));
-        }
-        Err(e) => {
-            println!("{:?}", e);
+    let rows_affected = sqlx::query("DELETE FROM pyme_order_item  WHERE order_id = $1")
+        .bind(order.id)
+        .execute(&state.db)
+        .await
+        .unwrap()
+        .rows_affected();
+
+    if rows_affected == 0 {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(json!({"detail": format!("Item with ID: {} not found", order.id)}))
+        ));
+    }
+
+    let mut items = Vec::<ItemModel>::new();
+
+    for i in body.items.unwrap().into_iter() {
+        let query = sqlx::query_as::<_,ItemModel>(
+            "INSERT INTO pyme_order_item (order_id,product,quantity,price) 
+                VALUES ($1, $2, $3, $4) RETURNING *")
+            .bind(order.id)
+            .bind(i.product)
+            .bind(i.quantity)
+            .bind(i.price)
+            .fetch_one(&state.db)
+            .await;
+        if let Err(e) = query {
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"status": "error","message": format!("{:?}", e)})),
-            ));
+                Json(json!({"status": "error","message": format!("{:?}", e)}))
+            ));                    
         }
+        items.push(query.unwrap());
     }
+    let mut order = json!(order);
+    order["items"] = json!(items);    
+    Ok(Json(order))
+
 }
 
 pub async fn delete_item(
@@ -234,21 +289,44 @@ pub async fn delete_item(
     Path(id): Path<i32>,  
     State(state): State<Arc<AppState>>
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let rows_affected = sqlx::query("DELETE FROM pyme_order  WHERE id = $1")
+    let query = sqlx::query_as::<_, OrderModel>(
+        "SELECT * FROM pyme_order WHERE id = $1")
         .bind(id)
+        .fetch_one(&state.db)
+        .await;
+    if let Err(e) = query {
+        println!("{:?}", e);
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(json!({"datail": format!("Item with ID: {} not found", id)}))
+        ));
+    }
+    let order = query.unwrap();
+    let rows_affected = sqlx::query("DELETE FROM pyme_order WHERE id = $1")
+        .bind(order.id)
         .execute(&state.db)
         .await
         .unwrap()
         .rows_affected();
-
     if rows_affected == 0 {
-        let error = json!({
-            "detail": format!("Item with ID: {} not found", id)
-        });
-        return Err((StatusCode::NOT_FOUND, Json(error)));
+        return Err((
+            StatusCode::NOT_FOUND, 
+            Json(json!({"detail": format!("Item with ID: {} not found", order.id)}))
+        ));
     }
-
-    Ok(StatusCode::NO_CONTENT)
+    let rows_affected = sqlx::query("DELETE FROM pyme_order_item WHERE order_id = $1")
+        .bind(order.id)
+        .execute(&state.db)
+        .await
+        .unwrap()
+        .rows_affected();
+    if rows_affected == 0 {
+        return Err((
+            StatusCode::NOT_FOUND, 
+            Json(json!({"detail": format!("Items with ID: {} not found", order.id)}))
+        ));
+    }
+    Ok(Json(json!({"result": "ok"})))
 }
 
 

@@ -1,12 +1,18 @@
 <script>
     import { onMount } from 'svelte';
-    //import { push } from 'svelte-spa-router';
+    import { push, querystring } from 'svelte-spa-router';
     import dayjs from 'dayjs';
     import { API_URL, state, apierror } from '../lib/store';
     import ItemsTable from '../lib/ItemTable.svelte';
     import ItemManager from "../lib/itemManager.js"
-    import Order from '../lib/Order.svelte';
+    import Info from '../lib/Info.svelte';
     
+    let info = "";
+    if ($querystring) {
+        let querystr = new URLSearchParams($querystring);
+        info = querystr.get("info");
+        console.log(info);
+    }
     let url = `${API_URL}pyme/`
     let isModal;
     let isModify;
@@ -18,7 +24,7 @@
     let showToolbar = true;
     let today = dayjs().toDate();
 
-    let title = "Items";
+    let title = "Orders";
     let table = {
         header : ['Date','Cust','Total', 'Paid'],
         columns : ['date','customer','price','paid'],
@@ -92,6 +98,7 @@
         showToolbar = false;
         isModify = false;
         error = '';
+        push("/order");
     }
     const showModify = (e) => {
         let o = e.detail;
@@ -101,6 +108,7 @@
         showToolbar = false;
         isModify = true;
         error = '';
+        push("/order/"+o.id);
     }
     const showRemove = (e) => {
         let o = e.detail;
@@ -109,13 +117,7 @@
         isModal = true;
         error = '';
     }
-    const closeForm = () => {
-        isRemove = false;
-        showForm = false;
-        showToolbar = true;
-        isModify = false;
-        error = '';
-    }
+
 </script>
 
 <svelte:head>
@@ -128,14 +130,7 @@
 </div>
 <br>
 
-{#if showForm}
-    <div class="row bg-light border-bottom">
-        <div class="col h2">Item:</div>
-    </div>
-    <Order {order} {isModify} on:close={closeForm} on:saved={refresh}/>
-    {/if}
-
-<br>
+<Info {info} />
 
 <ItemsTable 
     {title}

@@ -2,25 +2,21 @@
 // @ts-nocheck
 
     import { onMount } from 'svelte';
-    import { push } from 'svelte-spa-router';
+    import { pop, push } from 'svelte-spa-router';
     import { DateInput } from 'date-picker-svelte'
     import AutoComplete from "simple-svelte-autocomplete"
     import dayjs from 'dayjs';
     import * as yup from "yup";
-    import { API_URL, working, state } from './store';
-    import Error from './Error.svelte';
-    import ItemManager from './itemManager';
+    import { API_URL, working, state } from '../lib/store';
+    import Error from '../lib/Error.svelte';
+    import ItemManager from '../lib/itemManager';
     import { createEventDispatcher } from 'svelte';
-    import OrderItem from './OrderItem.svelte';
+    import OrderItem from '../lib/OrderItem.svelte';
 	const dispatch = createEventDispatcher()
-
-    const close = (e) => {
-        e.preventDefault();
-        dispatch('close');
-    }
 
     let url = `${API_URL}pyme/`
     let error;
+    let info;
     let errors = {};
     let manager = null;
     let today = dayjs().toDate();
@@ -28,10 +24,10 @@
     let customers = [];
     let products = [];
     let currentCustomer;
-    let currentProduct;
+    let isModify; 
 
-    export let isModify;
-    
+    export let params = {};
+
     export let order = {
         date: today,
         customer: '',
@@ -62,31 +58,63 @@
                 price: yup.number().required("Required"),    
             })
         ),
-    });    
-    
+    });  
+
     onMount(async () => {
         if (!manager)
             manager = new ItemManager(url);
+        if (params.id) {
+            isModify = true;
+            order = await getOrder(params.id);
+            currentCustomer = order.customer;
+        }
         products = await getProducts();
         errors = {}
 	});
 
-    const handleSubmit = async () => {
+    const getOrder = async (order_id) => {
+        let result = {};
+        try {
+            working.set(true);
+            const r = await fetch(`${url}${order_id}`, {
+                headers: {
+                Authorization: "Bearer " + $state.token,
+                },
+            });
+            const j = await r.json();
+            if (r.status !== 200) {
+                error = j.detail;
+                console.log("error:", error);
+            } else {
+                console.log(j);
+                result = j;
+                result.date = dayjs(result.date).toDate();
+            }
+        } catch (err) {
+            console.log(err);
+            error = "API: Error in fetching data.";
+        } finally {
+            working.set(false);
+        }
+        return result;
+    }
+    const saveOrder = async () => {
         order.customer = currentCustomer;
+        order.price = Number.parseInt(order.price);
+
         for (let item of order.items) {
             item.quantity = Number.parseInt(item.quantity);
 		    item.price = Number.parseInt(item.price);
         }
-		try {
+		
+        try {
 			await schema.validate(order, { abortEarly: false });
 			errors = {};
             await save();
+            push("/");
 		} catch (err) {
-            console.log(err);
-            errors = extractErrors(err);
-            //console.log(errors);           
+            errors = extractErrors(err);        
 		}
-
     }
     const extractErrors = (err) => {
         console.log(JSON.stringify(err));
@@ -188,22 +216,28 @@
         });
         order.items = [...order.items];
     }
-    const removeItem = async (index) => {
+    const removeItem = async (e) => {
+        const index = e.detail;
+        console.log('removing index', index);
         order.items.splice(index, 1);
         order.items = [...order.items];
+        updateTotal()
     }
-
+    const removeOrder = async () => {
+        await manager.remove(order.id);
+        push("/?info=Order deleted");
+    }
 </script>
 
 <div class="container">
-    {#if error}
-        <Error message={error} />
-    {/if}
-    {#if Object.keys(errors).length > 0}
-        <Error message={`Check errors: [${Object.keys(errors).toString()}]`} />
-    {/if}
 
-    <form on:submit|preventDefault={handleSubmit}  
+    <div class="row bg-light border-bottom">
+        <div class="col h2">Order:</div>
+    </div>
+
+    <Error message={error} />
+
+    <form on:submit|preventDefault={saveOrder}  
         class="needs-validation" novalidate>
     <div class="row">
         <div class="col">
@@ -292,7 +326,7 @@
         <div class="col">
             {#if isModify}
             <button class="btn btn-danger  w-100"
-                on:click={remove}
+                on:click|preventDefault={removeOrder}
                 disabled={$working}>
                 <i class="bi-trash3"/>
             </button>
@@ -302,14 +336,14 @@
         </div>
         <div class="col">
             <button class="btn btn-secondary w-100" 
-                on:click={close}
+                on:click|preventDefault={()=> pop()}
                 disabled={$working}>
                 Close
             </button>
         </div>
         <div class="col">
             <button class="btn btn-success w-100"
-                on:click={handleSubmit}
+                on:click|preventDefault={saveOrder}
                 disabled={$working}>
                 Save
             </button>

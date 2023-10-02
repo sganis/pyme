@@ -17,12 +17,14 @@
   import Error from './lib/Error.svelte';
   import Working from './lib/Working.svelte';
   import Stats from './routes/Stats.svelte';
+  import Order from './routes/Order.svelte';
   
   
   const routes = {
       '/': Home,
       '/login': Login,
       '/logout': Logout,
+      '/order/:id?': Order,
       '/stats': Stats,
 
       // Catch-all
