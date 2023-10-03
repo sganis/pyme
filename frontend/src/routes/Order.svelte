@@ -284,12 +284,6 @@
     {/each}
 
     <div class="row">
-        <div class="col">
-            <button class="btn btn-light mt-4" id="plus" 
-                on:click|preventDefault={addItem}>
-                <i class="bi-plus-lg"/>        
-            </button>
-        </div>  
         <div class="col">            
             <label for="price" class="form-label">Total Price</label>
             <input type="text" pattern="\d*" 
@@ -298,10 +292,15 @@
                 class="form-control" id="price"
                 min="1" max="10000">
         </div>  
+        <div class="col text-end">
+            <button class="btn btn-light mt-4" id="plus" 
+                on:click|preventDefault={addItem}>
+                <i class="bi-plus-lg"/>        
+            </button>
+        </div> 
     </div>
     
     <div class="row">
-        <div class="col"></div>
         <div class="col">
             <div class="form-check">
                 <input class="form-check-input" type="checkbox" 
