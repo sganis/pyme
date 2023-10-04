@@ -12,7 +12,7 @@ version = js['version']
 assert version
 
 print(f'deploying v{version}...')
-run('call npm --prefix ./frontend run build')
+run('npm --prefix ./frontend run build')
 run('git add ./frontend')
 run(f'git commit -am "v{version}"')
 run(f'git tag -a v{version} -m v{version}')
