@@ -266,6 +266,7 @@
                 delay="200"
                 bind:selectedItem={order.customer}
                 bind:text={currentCustomer}
+                disabled={$working}
                 create={true}
                 createText={"Item doesn't exist, create one?"} 
                 onCreate={handleCreate}         />

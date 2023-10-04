@@ -7,7 +7,13 @@
     export let sortCol;
     export let sortDesc;
     export let items;
+    export let offset;
+    export let limit;
+    export let total;
     export let showToolbar;
+
+    $:page = offset/limit + 1;
+    $:total_pages = Math.ceil(total/limit);
 
     let searchText;
     
@@ -26,8 +32,8 @@
     const showModify = (o) => {
         dispatch('showModify', o);
     }
-    const showRemove = (o) => {
-        dispatch('showRemove', o);
+    const goToPage = (page) => {
+        dispatch('goToPage', page);
     }
     
 </script>
@@ -60,13 +66,14 @@
         New
     </button>
 </div>
-<br>
 {/if}
 
-<div class="row">
+
+
+<div class="row mt-3">
     <div class="table-responsive">
         <table class="table table-hover table-sm">
-            <thead class="table-success">
+            <thead class="table-warning">
                 <tr>
                     {#each table.columns as col, i}
                     <th on:click={()=>sort(col)} role="button" class="text-nowrap">
@@ -82,19 +89,13 @@
             <tbody>
             {#each items as o, i}
             <tr class="clickable" on:click={()=>showModify(o)}>
-                {#each table.columns as col}
-                <td>{ o[col] || ""}</td>
+                {#each table.columns as col, index}
+                    {#if col === 'paid' && o[col] }
+                    <td><i class="bi-check2"/></td>
+                    {:else}
+                    <td>{ o[col] || ""}</td>
+                    {/if}
                 {/each}
-                <!-- <td class="text-nowrap text-end">
-                    <button class="btn btn-light btn-sm btn-width-sm" type="button" 
-                        on:click={() => showModify(o)}>
-                        <i class="bi-pencil"/>
-                    </button>
-                    <button class="btn btn-light btn-sm btn-width-sm" type="button" 
-                        on:click={() => showRemove(o)}>
-                        <i class="bi-trash3"/>
-                    </button>
-                </td>             -->
             </tr>    
             {/each} 
             </tbody>
@@ -102,18 +103,37 @@
     </div>
 </div>
 
-<div>Total: {items.length}</div>
+
+<div class="d-flex flex-row justify-content-end gap-3">
+    {#if total_pages}
+    {#if page > 1}
+    <a href="#/" on:click={()=>goToPage(1)} class="page"><i class="bi-chevron-double-left"/></a>
+    <a href="#/" on:click={()=>goToPage(page - 1)} class="page"><i class="bi-chevron-left"/></a>
+    {:else}
+    <i class="bi-chevron-double-left link-disabled" />
+    <i class="bi-chevron-left link-disabled" />
+    {/if}
+    Page {page}/{total_pages}
+    {#if page + 1 <= total_pages}
+    <a href="#/" on:click={()=>goToPage(page + 1)} class="page"><i class="bi-chevron-right"/></a>
+    <a href="#/" on:click={()=>goToPage(total_pages)} class="page"><i class="bi-chevron-double-right"/></a>
+    {:else}
+    <i class="bi-chevron-right link-disabled" />
+    <i class="bi-chevron-double-right link-disabled" />
+    {/if}    
+    {/if}
+</div>
 
 
 <style>
-    .btn-width-sm {
-        width: 32px;
-    }
     .bi-app {
         content: "\2122";
         color: transparent !important;
     }
     .clickable {
         cursor: pointer;
+    }
+    .link-disabled {
+        color: lightgray;
     }
 </style>

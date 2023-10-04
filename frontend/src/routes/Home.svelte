@@ -26,8 +26,8 @@
 
     let title = "Orders";
     let table = {
-        header : ['Date','Cust','Total', 'Paid'],
-        columns : ['date','customer','price','paid'],
+        header : ['ID','Date','Cust','Total', 'Paid'],
+        columns : ['id','date','customer','price','paid'],
     }
     let itemInit = {
         date: today,
@@ -43,7 +43,11 @@
     }
     let order = {...itemInit}
 
-    let items = [];
+    let result = {
+        items : [],
+        offset : 0,
+    };
+    let limit = 10;
     let error = '';
     let timer;
     const waitTime = 500;
@@ -52,15 +56,15 @@
         console.log('mouning home, state:', JSON.stringify($state));
         console.log(url);
         if (manager===undefined)
-            manager = new ItemManager(url, sortCol, sortDesc);
+            manager = new ItemManager(url, sortCol, sortDesc, limit, 0);
         await manager.search();
         error = manager.error;
-        items = manager.result;       
+        result = manager.result;       
     });
     const refresh = async () => {
         await manager.search();
         error = manager.error;
-        items = manager.result;
+        result = manager.result;       
     } 
     const searchLater = async (e) => {
         const searchText = e.detail;
@@ -69,12 +73,12 @@
         if (e.key == "Enter") {
             await manager.search();
             error = manager.error;
-            items = manager.result;
+            result = manager.result;       
         } else {
             timer = setTimeout(async () => {
                 await manager.search();
                 error = manager.error;
-                items = manager.result;
+                result = manager.result;       
             }, waitTime);
         }
     }
@@ -90,7 +94,7 @@
         sortDesc = manager.sortDesc;
         await manager.search();
         error = manager.error;
-        items = manager.result;
+        result = manager.result;       
     }
     const showCreate = () => {
         order = {...itemInit};
@@ -117,6 +121,17 @@
         isModal = true;
         error = '';
     }
+    const goToPage = async (e) => {
+        let page = e.detail;
+        if (page < 1) page = 1;
+        let offset = (page-1)*limit;
+        //console.log('goto page:', page, offset);
+        
+        manager.offset = offset;
+        await manager.search();
+        error = manager.error;
+        result = manager.result;
+    }
 
 </script>
 
@@ -135,7 +150,10 @@
 <ItemsTable 
     {title}
     {showToolbar}
-    {items} 
+    items={result.items} 
+    {limit}
+    offset={result.offset}
+    total={result.total}
     {table} 
     {sortCol} 
     {sortDesc} 
@@ -144,7 +162,8 @@
     on:searchLater={searchLater} 
     on:showCreate={showCreate}  
     on:showRemove={showRemove}  
-    on:showModify={showModify} />
+    on:showModify={showModify} 
+    on:goToPage={goToPage} />
 
 
 <style>

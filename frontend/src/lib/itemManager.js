@@ -3,10 +3,12 @@ import { push } from "svelte-spa-router";
 import { working, state, apierror } from "./store";
 
 export default class ItemManager {
-  constructor(url, sortcol, sortdesc) {
+  constructor(url, sortcol, sortdesc, limit, offset) {
     this.url = url;
     this.sortCol = sortcol;
     this.sortDesc = sortdesc;
+    this.limit = limit;
+    this.offset = offset;
     this.searchText = "";
     this.result = [];
     this.error = "";
@@ -17,7 +19,7 @@ export default class ItemManager {
       working.set(true);
       apierror.set("");
       this.error = "";
-      let query = `q=${this.searchText}&sortcol=${this.sortCol}&desc=${this.sortDesc}`;
+      let query = `q=${this.searchText}&sortcol=${this.sortCol}&desc=${this.sortDesc}&limit=${this.limit}&offset=${this.offset}`;
 
       const r = await fetch(`${this.url}?${query}`, {
         headers: {
