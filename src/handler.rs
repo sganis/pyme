@@ -15,7 +15,7 @@ use axum::{
 };
 use crate::{
     auth::{Claims, AuthPayload, AuthError, KEYS},
-    model::{OrderModel,ItemModel},
+    model::{OrderModel,ItemModel,CountModel},
     schema::{Params, OrderSchema, CreateOrderSchema},
     AppState,    
 };
@@ -62,10 +62,27 @@ pub async fn get_items(
     let q = params.q.unwrap_or("".to_string());
     let sortcol = params.sortcol.unwrap_or("date".to_string());
     let desc = params.desc.unwrap_or(true);
-    let limit = params.limit.unwrap_or(50);
-    let offset = (params.page.unwrap_or(1) - 1) * limit;  
+    let limit = params.limit.unwrap_or(10);
+    let offset = params.offset.unwrap_or(0);  
 
-    let mut query = QueryBuilder::new("SELECT * from pyme_order");
+    let mut query = QueryBuilder::new("SELECT count(*) from pyme_order");
+    if q.len() > 0 {
+        query.push(" where customer ilike ");
+        query.push_bind(format!("%{}%", q));
+    }
+    let query_total = query.build_query_as::<CountModel>().fetch_one(&data.db).await; 
+    
+    if let Err(e) = query_total {
+        println!("{e}");            
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR, 
+            Json(json!({"detail": "Something bad happened while fetching all item items"}))
+        ));
+    }
+    let total = query_total.unwrap().count;
+    println!("total={total}");
+
+    query = QueryBuilder::new("SELECT * from pyme_order");
     if q.len() > 0 {
         query.push(" where customer ilike ");
         query.push_bind(format!("%{}%", q));
@@ -91,14 +108,19 @@ pub async fn get_items(
     match query {
         Ok(items) => {
             println!("{:?}", items[0]);
-            Ok(Json(json!(items)))
+            Ok(Json(json!({
+                "items" : items,
+                "total" : total,
+                "limit" : limit,
+                "offset" : offset,                
+            })))
         }
         Err(e) => {
             println!("error: {:?}", e);
-            let error = json!({
-                "detail": "Something bad happened while fetching all item items"
-            });
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)));
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR, 
+                Json(json!({"detail": "Something bad happened while fetching all item items"}))
+            ));
         }
     }
 }

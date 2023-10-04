@@ -26,6 +26,13 @@ pub struct ItemModel {
 
 #[derive(Debug, FromRow, Deserialize, Serialize)]
 #[allow(non_snake_case)]
+pub struct CountModel { 
+    pub count: i64 
+}
+
+
+#[derive(Debug, FromRow, Deserialize, Serialize)]
+#[allow(non_snake_case)]
 pub struct CustomerModel {
     pub customer: String,
 }

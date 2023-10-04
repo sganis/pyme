@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug, Default)]
 pub struct Params {
-    pub page: Option<i32>,
     pub limit: Option<i32>,
+    pub offset: Option<i32>,
     pub q: Option<String>,
     pub sortcol: Option<String>,
     pub desc: Option<bool>,
