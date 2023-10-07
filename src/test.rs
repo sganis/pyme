@@ -45,7 +45,10 @@ mod tests {
 
     #[test]
     fn test_fibi() {
-        let result = fib_iterative(100);
+        let n = 100;
+        let result = fib_iterative(n);
         assert_eq!(result, 354_224_848_179_261_915_075);
+        let j: serde_json::Value = json!({"n": n, "fibonacci": fib_iterative(n)});
+        println!("{j}");
     }
 }
