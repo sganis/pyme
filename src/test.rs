@@ -50,5 +50,6 @@ mod tests {
         assert_eq!(result, 354_224_848_179_261_915_075);
         let j: serde_json::Value = json!({"n": n, "fibonacci": fib_iterative(n)});
         println!("{j}");
+        assert!(!j.is_u64());
     }
 }

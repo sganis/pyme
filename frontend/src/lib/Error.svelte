@@ -1,10 +1,10 @@
 <script>
-    export let message;
+    export let error;
 
 </script>
 
-{#if message}
+{#if error}
 <div class="row alert alert-danger">
-    {message}
+    {error}
 </div>
 {/if}

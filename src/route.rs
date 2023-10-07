@@ -1,7 +1,8 @@
 use crate::{
     handler::{
         create_item, delete_item, get_customers, get_item, get_items, get_products,
-        get_stat_customer, get_stat_product, get_stat_quarter, get_stat_year, token, update_item,
+        get_stat_customer, get_stat_product, get_stat_quarter, get_stat_year, password, token,
+        update_item,
     },
     test::{fibi, fibr, ping},
     AppState,
@@ -21,6 +22,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/fibr/:n", get(fibr))
         .route("/fibi/:n", get(fibi))
         .route("/token", post(token))
+        .route("/password", post(password))
         .route("/pyme/", get(get_items).post(create_item).put(update_item))
         .route("/pyme/customers/", get(get_customers))
         .route("/pyme/products/", get(get_products))

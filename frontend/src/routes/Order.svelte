@@ -235,7 +235,7 @@
         <div class="col h2">Order:</div>
     </div>
 
-    <Error message={error} />
+    <Error {error} />
 
     <form on:submit|preventDefault={saveOrder}  
         class="needs-validation" novalidate>

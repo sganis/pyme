@@ -18,6 +18,7 @@
   import Working from './lib/Working.svelte';
   import Stats from './routes/Stats.svelte';
   import Order from './routes/Order.svelte';
+  import Profile from './routes/Profile.svelte';
   
   
   const routes = {
@@ -26,6 +27,7 @@
       '/logout': Logout,
       '/order/:id?': Order,
       '/stats': Stats,
+      '/profile': Profile,
 
       // Catch-all
       '*': NotFound,
@@ -51,6 +53,11 @@
           </a>
         </li>
         <li class="nav-item">
+          <a class="nav-link" href="/profile" use:link >
+            Profile
+          </a>
+        </li>
+        <li class="nav-item">
           <a class="nav-link" href="/logout" use:link >
             Logout
           </a>
@@ -71,7 +78,7 @@
 
 <div class="container">
 
-  <Error message={$apierror} />
+  <Error error={$apierror} />
 
   <Router {routes} restoreScrollState={true} />
 

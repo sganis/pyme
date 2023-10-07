@@ -1,10 +1,15 @@
-use std::sync::Arc;
-//use jsonwebtoken::{encode, Header};
 use crate::{
-    auth::{AuthError, AuthPayload, Claims, KEYS},
+    auth::{AuthData, AuthError, Claims, KEYS},
     model::{CountModel, ItemModel, OrderModel},
     schema::{CreateOrderSchema, OrderSchema, Params},
     AppState,
+};
+use argon2::{
+    password_hash::{
+        rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier,
+        SaltString,
+    },
+    Argon2,
 };
 use axum::{
     extract::{Json, Path, Query, State},
@@ -12,45 +17,152 @@ use axum::{
     response::IntoResponse,
 };
 use jsonwebtoken::{encode, Header};
-use serde_json::{json, Value};
+use serde_json::json;
 use sqlx::Row;
 use sqlx::{query_builder::QueryBuilder, Execute};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub async fn token(
-    Json(payload): Json<AuthPayload>,
-    //Extension(pool): Extension<PgPool>,
-) -> Result<Json<Value>, AuthError> {
+    State(state): State<Arc<AppState>>,
+    Json(authdata): Json<AuthData>,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     // check if email or password is a blank string
-    if payload.username.is_empty() || payload.password.is_empty() {
-        return Err(AuthError::MissingCredentials);
+    if authdata.username.is_empty() || authdata.password.is_empty() {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"detail": "Wrong credentials"})),
+        ));
     }
-    // if password is encrypted than decode it first before comparing
-    if payload.username != "alice" || payload.password != "secret" {
-        // password is incorrect
-        Err(AuthError::WrongCredentials)
+
+    let query = sqlx::query(
+        r#"
+        SELECT username,password_hash FROM public.user WHERE username = $1
+        "#,
+    )
+    .bind(authdata.username.clone())
+    .fetch_one(&state.db)
+    .await;
+
+    if let Err(e) = query {
+        println!("error: {:?}", e);
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"detail": "Wrong credentials"})),
+        ));
+    }
+
+    let hash_password: String = query.unwrap().get(1);
+    // println!("hash = {}", hash_password.clone());
+    // println!("password={}", authdata.password.clone());
+    let db_hash = PasswordHash::new(&hash_password).unwrap();
+    let valid: bool = Argon2::default()
+        .verify_password(authdata.password.as_bytes(), &db_hash)
+        .is_ok();
+
+    if !valid {
+        Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"detail": "Wrong credentials"})),
+        ))
     } else {
         let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         let expiration = epoch + Duration::from_secs(60 * 60 * 24 * 7); // a week
         let claims = Claims {
-            sub: payload.username.to_owned(),
+            sub: authdata.username.to_owned(),
             exp: expiration.as_secs(),
         };
         let token = encode(&Header::default(), &claims, &KEYS.encoding)
-            .map_err(|_| AuthError::TokenCreation)?;
-        // return bearer token
+            .map_err(|_| AuthError::TokenCreation)
+            .unwrap();
+
         Ok(Json(json!({
             "access_token": token,
             "type": "Bearer",
-            "username": payload.username
+            "username": authdata.username
         })))
+    }
+}
+
+pub async fn password(
+    State(state): State<Arc<AppState>>,
+    Json(authdata): Json<AuthData>,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let newpassword = authdata.newpassword.unwrap();
+    if authdata.username.is_empty()
+        || authdata.password.is_empty()
+        || newpassword.is_empty()
+    {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"detail": "Wrong credentials"})),
+        ));
+    }
+
+    let query = sqlx::query(
+        r#"
+        SELECT username,password_hash FROM public.user WHERE username = $1
+        "#,
+    )
+    .bind(authdata.username.clone())
+    .fetch_one(&state.db)
+    .await;
+
+    if let Err(e) = query {
+        println!("error: {:?}", e);
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"detail": "Wrong credentials"})),
+        ));
+    }
+
+    let hash_password: String = query.unwrap().get(1);
+    let db_hash = PasswordHash::new(&hash_password).unwrap();
+    let valid: bool = Argon2::default()
+        .verify_password(authdata.password.as_bytes(), &db_hash)
+        .is_ok();
+
+    if !valid {
+        Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"detail": "Wrong credentials"})),
+        ))
+    } else {
+        // change password
+        let salt = SaltString::generate(&mut OsRng);
+        let argon2 = Argon2::default();
+        let password_hash = argon2
+            .hash_password(newpassword.as_bytes(), &salt)
+            .unwrap()
+            .to_string();
+
+        let query = sqlx::query(
+            r#"
+            UPDATE public.user SET password_hash=$1
+            WHERE username=$2 returning *
+            "#,
+        )
+        .bind(password_hash.clone())
+        .bind(authdata.username.clone())
+        .fetch_one(&state.db)
+        .await;
+
+        if let Err(e) = query {
+            println!("{e}");
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"detail": "Password not changed"})),
+            ))
+        } else {
+            Ok(Json(json!({"result": "Password changed successfully"})))
+        }
     }
 }
 
 pub async fn get_items(
     _claims: Claims,
     params: Option<Query<Params>>,
-    State(data): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let Query(params) = params.unwrap_or_default();
     let q = params.q.unwrap_or("".to_string());
@@ -66,14 +178,16 @@ pub async fn get_items(
     }
     let query_total = query
         .build_query_as::<CountModel>()
-        .fetch_one(&data.db)
+        .fetch_one(&state.db)
         .await;
 
     if let Err(e) = query_total {
         println!("{e}");
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"detail": "Something bad happened while fetching all item items"})),
+            Json(json!({
+                "detail": "Something bad happened while fetching all item items"
+            })),
         ));
     }
     let total = query_total.unwrap().count;
@@ -103,7 +217,7 @@ pub async fn get_items(
         q, sortcol, desc, limit, offset
     );
 
-    let query = query.fetch_all(&data.db).await;
+    let query = query.fetch_all(&state.db).await;
 
     match query {
         Ok(items) => {
@@ -119,7 +233,9 @@ pub async fn get_items(
             println!("error: {:?}", e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"detail": "Something bad happened while fetching all item items"})),
+                Json(json!({
+                    "detail": "Something bad happened while fetching all item items"
+                })),
             ))
         }
     }
@@ -219,7 +335,8 @@ pub async fn create_item(
         .fetch_one(&state.db)
         .await;
         if let Err(e) = query {
-            let error = json!({"status": "error","message": format!("{:?}", e)});
+            let error =
+                json!({"status": "error","message": format!("{:?}", e)});
             return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)));
         }
         items.push(query.unwrap());
@@ -234,16 +351,20 @@ pub async fn update_item(
     State(state): State<Arc<AppState>>,
     Json(body): Json<OrderSchema>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let query = sqlx::query_as::<_, OrderModel>("SELECT * FROM pyme_order WHERE id = $1")
-        .bind(body.id)
-        .fetch_one(&state.db)
-        .await;
+    let query = sqlx::query_as::<_, OrderModel>(
+        "SELECT * FROM pyme_order WHERE id = $1",
+    )
+    .bind(body.id)
+    .fetch_one(&state.db)
+    .await;
 
     if let Err(e) = query {
         println!("{:?}", e);
         return Err((
             StatusCode::NOT_FOUND,
-            Json(json!({"datail": format!("Item with ID: {} not found", body.id)})),
+            Json(
+                json!({"datail": format!("Item with ID: {} not found", body.id)}),
+            ),
         ));
     }
 
@@ -276,17 +397,20 @@ pub async fn update_item(
         ));
     }
 
-    let rows_affected = sqlx::query("DELETE FROM pyme_order_item  WHERE order_id = $1")
-        .bind(order.id)
-        .execute(&state.db)
-        .await
-        .unwrap()
-        .rows_affected();
+    let rows_affected =
+        sqlx::query("DELETE FROM pyme_order_item  WHERE order_id = $1")
+            .bind(order.id)
+            .execute(&state.db)
+            .await
+            .unwrap()
+            .rows_affected();
 
     if rows_affected == 0 {
         return Err((
             StatusCode::NOT_FOUND,
-            Json(json!({"detail": format!("Item with ID: {} not found", order.id)})),
+            Json(json!({
+                "detail": format!("Item with ID: {} not found", order.id)
+            })),
         ));
     }
 
@@ -321,10 +445,12 @@ pub async fn delete_item(
     Path(id): Path<i32>,
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let query = sqlx::query_as::<_, OrderModel>("SELECT * FROM pyme_order WHERE id = $1")
-        .bind(id)
-        .fetch_one(&state.db)
-        .await;
+    let query = sqlx::query_as::<_, OrderModel>(
+        "SELECT * FROM pyme_order WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await;
     if let Err(e) = query {
         println!("{:?}", e);
         return Err((
@@ -342,19 +468,24 @@ pub async fn delete_item(
     if rows_affected == 0 {
         return Err((
             StatusCode::NOT_FOUND,
-            Json(json!({"detail": format!("Item with ID: {} not found", order.id)})),
+            Json(json!({
+                "detail": format!("Item with ID: {} not found", order.id)
+            })),
         ));
     }
-    let rows_affected = sqlx::query("DELETE FROM pyme_order_item WHERE order_id = $1")
-        .bind(order.id)
-        .execute(&state.db)
-        .await
-        .unwrap()
-        .rows_affected();
+    let rows_affected =
+        sqlx::query("DELETE FROM pyme_order_item WHERE order_id = $1")
+            .bind(order.id)
+            .execute(&state.db)
+            .await
+            .unwrap()
+            .rows_affected();
     if rows_affected == 0 {
         return Err((
             StatusCode::NOT_FOUND,
-            Json(json!({"detail": format!("Items with ID: {} not found", order.id)})),
+            Json(json!({
+                "detail": format!("Items with ID: {} not found", order.id)
+            })),
         ));
     }
     Ok(Json(json!({"result": "ok"})))
@@ -398,7 +529,7 @@ pub async fn get_customers(
         }
         Err(e) => {
             println!("error: {:?}", e);
-            let error = serde_json::json!({
+            let error = json!({
                 "detail": "Something bad happened while fetching customers",
             });
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)))
@@ -429,7 +560,7 @@ pub async fn get_products(
         }
         Err(e) => {
             println!("error: {:?}", e);
-            let error = serde_json::json!({
+            let error = json!({
                 "detail": "Something bad happened while fetching products",
             });
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)))
@@ -443,10 +574,12 @@ pub async fn get_stat_customer(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query(
         r#"
-        select customer, cast(sum(quantity) as text), cast(sum(price) as text)
-        from public.pyme_order
-        group by customer 
-        order by sum(price) desc
+        select o.customer, cast(sum(i.quantity) as text), 
+        cast(sum(i.price) as text)
+        from public.pyme_order o 
+        inner join public.pyme_order_item i on o.id=i.order_id
+        group by o.customer 
+        order by sum(i.price) desc
         "#,
     )
     .fetch_all(&state.db)
@@ -463,7 +596,7 @@ pub async fn get_stat_customer(
         }
         Err(e) => {
             println!("error: {:?}", e);
-            let error = serde_json::json!({
+            let error = json!({
                 "detail": "Something bad happened while fetching customers",
             });
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)))
@@ -476,8 +609,9 @@ pub async fn get_stat_product(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query(
         r#"
-        select product, cast(sum(quantity) as text), cast(sum(price) as text) 
-        from public.pyme_order
+        select product, cast(sum(quantity) as text), 
+        cast(sum(price) as text)
+        from public.pyme_order_item
         group by product 
         order by sum(price) desc
         "#,
@@ -496,7 +630,7 @@ pub async fn get_stat_product(
         }
         Err(e) => {
             println!("error: {:?}", e);
-            let error = serde_json::json!({
+            let error = json!({
                 "detail": "Something bad happened while fetching customers",
             });
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)))
@@ -510,15 +644,17 @@ pub async fn get_stat_year(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query(
         r#"
-        select cast(year as text), cast(sum(quantity) as text), cast(sum(price) as text)
+        select cast(year as text), cast(sum(quantity) as text), 
+        cast(sum(price) as text)
         from (
-            select to_date(date, 'YYYY-MM-DD') as date 
-                ,extract(year from to_date(date, 'YYYY-MM-DD')) as year
-                ,customer
-                ,product
-                ,quantity
-                ,price
-                from public.pyme_order
+            select to_date(o.date, 'YYYY-MM-DD') as date 
+                ,extract(year from to_date(o.date, 'YYYY-MM-DD')) as year
+                ,o.customer
+                ,i.product
+                ,i.quantity
+                ,i.price
+                from public.pyme_order o
+                inner join public.pyme_order_item i on o.id=i.order_id
             ) as t
         group by year order by year desc
         "#,
@@ -537,7 +673,7 @@ pub async fn get_stat_year(
         }
         Err(e) => {
             println!("error: {:?}", e);
-            let error = serde_json::json!({
+            let error = json!({
                 "detail": "Something bad happened while fetching customers",
             });
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)))
@@ -550,16 +686,20 @@ pub async fn get_stat_quarter(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query(r#"
-        select cast(quarter as text), cast(sum(quantity) as text), cast(sum(price) as text)
+        select cast(quarter as text), cast(sum(quantity) as text), 
+        cast(sum(price) as text)
         from (
-            select to_date(date, 'YYYY-MM-DD') as date 
-                ,extract(year from to_date(date, 'YYYY-MM-DD')) as year
-                ,extract(year from to_date(date, 'YYYY-MM-DD')) ||'/Q'|| extract(quarter from to_date(date, 'YYYY-MM-DD')) as quarter
-                ,customer
-                ,product
-                ,quantity
-                ,price
-                from public.pyme_order
+            select to_date(o.date, 'YYYY-MM-DD') as date 
+                ,extract(year from to_date(o.date, 'YYYY-MM-DD')) as year
+                ,extract(year from to_date(o.date, 'YYYY-MM-DD')) 
+                    ||'/Q'|| extract(quarter from to_date(o.date, 'YYYY-MM-DD')) 
+                    as quarter
+                ,o.customer
+                ,i.product
+                ,i.quantity
+                ,i.price
+                from public.pyme_order o
+                inner join public.pyme_order_item i on o.id=i.order_id
             ) as t
         group by quarter order by quarter desc
         "#)
@@ -576,7 +716,7 @@ pub async fn get_stat_quarter(
         }
         Err(e) => {
             println!("error: {:?}", e);
-            let error = serde_json::json!({
+            let error = json!({
                 "detail": "Something bad happened while fetching customers",
             });
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)))
