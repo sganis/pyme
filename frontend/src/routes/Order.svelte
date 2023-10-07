@@ -361,11 +361,7 @@
         margin-bottom: 2px;
         font-size: small;
     }
-    input{
-        background-color: whitesmoke;
-    }
     :root {
         --date-input-width: 100%;
     }
-
 </style>

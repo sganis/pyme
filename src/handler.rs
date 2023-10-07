@@ -1,26 +1,21 @@
 use std::sync::Arc;
 //use jsonwebtoken::{encode, Header};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use jsonwebtoken::{encode, Header};
-use serde_json::{json, Value};
-use sqlx::Row;
-use sqlx::{
-    Execute,
-    query_builder::QueryBuilder
+use crate::{
+    auth::{AuthError, AuthPayload, Claims, KEYS},
+    model::{CountModel, ItemModel, OrderModel},
+    schema::{CreateOrderSchema, OrderSchema, Params},
+    AppState,
 };
 use axum::{
-    extract::{Path, Query, State, Json},
+    extract::{Json, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
 };
-use crate::{
-    auth::{Claims, AuthPayload, AuthError, KEYS},
-    model::{OrderModel,ItemModel,CountModel},
-    schema::{Params, OrderSchema, CreateOrderSchema},
-    AppState,    
-};
-
-
+use jsonwebtoken::{encode, Header};
+use serde_json::{json, Value};
+use sqlx::Row;
+use sqlx::{query_builder::QueryBuilder, Execute};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub async fn token(
     Json(payload): Json<AuthPayload>,
@@ -44,46 +39,48 @@ pub async fn token(
         let token = encode(&Header::default(), &claims, &KEYS.encoding)
             .map_err(|_| AuthError::TokenCreation)?;
         // return bearer token
-        Ok(Json(json!({ 
-            "access_token": token, 
-            "type": "Bearer", 
-            "username": payload.username 
+        Ok(Json(json!({
+            "access_token": token,
+            "type": "Bearer",
+            "username": payload.username
         })))
     }
 }
 
-
 pub async fn get_items(
     _claims: Claims,
     params: Option<Query<Params>>,
-    State(data): State<Arc<AppState>>
+    State(data): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let Query(params) = params.unwrap_or_default();
     let q = params.q.unwrap_or("".to_string());
     let sortcol = params.sortcol.unwrap_or("date".to_string());
     let desc = params.desc.unwrap_or(true);
     let limit = params.limit.unwrap_or(10);
-    let offset = params.offset.unwrap_or(0);  
+    let offset = params.offset.unwrap_or(0);
 
     let mut query = QueryBuilder::new("SELECT count(*) from pyme_order");
-    if q.len() > 0 {
+    if !q.is_empty() {
         query.push(" where customer ilike ");
         query.push_bind(format!("%{}%", q));
     }
-    let query_total = query.build_query_as::<CountModel>().fetch_one(&data.db).await; 
-    
+    let query_total = query
+        .build_query_as::<CountModel>()
+        .fetch_one(&data.db)
+        .await;
+
     if let Err(e) = query_total {
-        println!("{e}");            
+        println!("{e}");
         return Err((
-            StatusCode::INTERNAL_SERVER_ERROR, 
-            Json(json!({"detail": "Something bad happened while fetching all item items"}))
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"detail": "Something bad happened while fetching all item items"})),
         ));
     }
     let total = query_total.unwrap().count;
     println!("total={total}");
 
     query = QueryBuilder::new("SELECT * from pyme_order");
-    if q.len() > 0 {
+    if !q.is_empty() {
         query.push(" where customer ilike ");
         query.push_bind(format!("%{}%", q));
     }
@@ -99,11 +96,14 @@ pub async fn get_items(
     query.push_bind(limit);
     query.push(" offset ");
     query.push_bind(offset);
-    let query = query.build_query_as::<OrderModel>();    
+    let query = query.build_query_as::<OrderModel>();
     println!("{}", query.sql());
-    println!("q={} sortcol={} desc={} limit={} offset={}", q,sortcol,desc,limit,offset);
+    println!(
+        "q={} sortcol={} desc={} limit={} offset={}",
+        q, sortcol, desc, limit, offset
+    );
 
-    let query = query.fetch_all(&data.db).await; 
+    let query = query.fetch_all(&data.db).await;
 
     match query {
         Ok(items) => {
@@ -112,15 +112,15 @@ pub async fn get_items(
                 "items" : items,
                 "total" : total,
                 "limit" : limit,
-                "offset" : offset,                
+                "offset" : offset,
             })))
         }
         Err(e) => {
             println!("error: {:?}", e);
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR, 
-                Json(json!({"detail": "Something bad happened while fetching all item items"}))
-            ));
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"detail": "Something bad happened while fetching all item items"})),
+            ))
         }
     }
 }
@@ -128,14 +128,17 @@ pub async fn get_items(
 pub async fn get_item(
     _claims: Claims,
     Path(id): Path<i32>,
-    State(state): State<Arc<AppState>>
+    State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     println!("id={}", id);
-    let query = sqlx::query_as::<_, OrderModel>(r#"
+    let query = sqlx::query_as::<_, OrderModel>(
+        r#"
         SELECT * FROM pyme_order WHERE id = $1
-        "#)
-        .bind(id)
-        .fetch_one(&state.db).await;
+        "#,
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await;
 
     if let Err(e) = query {
         println!("error: {:?}", e);
@@ -144,13 +147,16 @@ pub async fn get_item(
         });
         return Err((StatusCode::NOT_FOUND, Json(error)));
     }
-    
+
     let order = query.unwrap();
-    let query = sqlx::query_as::<_, ItemModel>(r#"
+    let query = sqlx::query_as::<_, ItemModel>(
+        r#"
         SELECT * FROM pyme_order_item WHERE order_id = $1
-        "#)
-        .bind(order.id)
-        .fetch_all(&state.db).await;
+        "#,
+    )
+    .bind(order.id)
+    .fetch_all(&state.db)
+    .await;
 
     if let Err(e) = query {
         println!("error: {:?}", e);
@@ -170,16 +176,17 @@ pub async fn create_item(
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateOrderSchema>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let query = sqlx::query_as::<_,OrderModel>(
+    let query = sqlx::query_as::<_, OrderModel>(
         "INSERT INTO pyme_order (date,customer,price,paid, notes) 
-            VALUES ($1, $2, $3, $4, $5) RETURNING *")
-        .bind(body.date.to_string())
-        .bind(body.customer.to_string())
-        .bind(body.price)
-        .bind(body.paid)
-        .bind(body.notes)
-        .fetch_one(&state.db)
-        .await;
+            VALUES ($1, $2, $3, $4, $5) RETURNING *",
+    )
+    .bind(body.date.to_string())
+    .bind(body.customer.to_string())
+    .bind(body.price)
+    .bind(body.paid)
+    .bind(body.notes)
+    .fetch_one(&state.db)
+    .await;
 
     if let Err(e) = query {
         if e.to_string()
@@ -201,34 +208,33 @@ pub async fn create_item(
     let mut items = Vec::<ItemModel>::new();
 
     for i in body.items.into_iter() {
-        let query = sqlx::query_as::<_,ItemModel>(
+        let query = sqlx::query_as::<_, ItemModel>(
             "INSERT INTO pyme_order_item (order_id,product,quantity,price) 
-                VALUES ($1, $2, $3, $4) RETURNING *")
-            .bind(order.id)
-            .bind(i.product)
-            .bind(i.quantity)
-            .bind(i.price)
-            .fetch_one(&state.db)
-            .await;
+                VALUES ($1, $2, $3, $4) RETURNING *",
+        )
+        .bind(order.id)
+        .bind(i.product)
+        .bind(i.quantity)
+        .bind(i.price)
+        .fetch_one(&state.db)
+        .await;
         if let Err(e) = query {
             let error = json!({"status": "error","message": format!("{:?}", e)});
-            return Err((StatusCode::INTERNAL_SERVER_ERROR,Json(error)));                    
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)));
         }
         items.push(query.unwrap());
     }
     let mut order = json!(order);
     order["items"] = json!(items);
-    Ok(Json(order)) 
+    Ok(Json(order))
 }
 
 pub async fn update_item(
-    _claims: Claims, 
+    _claims: Claims,
     State(state): State<Arc<AppState>>,
     Json(body): Json<OrderSchema>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    
-    let query = sqlx::query_as::<_, OrderModel>(
-        "SELECT * FROM pyme_order WHERE id = $1")
+    let query = sqlx::query_as::<_, OrderModel>("SELECT * FROM pyme_order WHERE id = $1")
         .bind(body.id)
         .fetch_one(&state.db)
         .await;
@@ -237,7 +243,7 @@ pub async fn update_item(
         println!("{:?}", e);
         return Err((
             StatusCode::NOT_FOUND,
-            Json(json!({"datail": format!("Item with ID: {} not found", body.id)}))
+            Json(json!({"datail": format!("Item with ID: {} not found", body.id)})),
         ));
     }
 
@@ -248,16 +254,20 @@ pub async fn update_item(
     let query = sqlx::query_as::<_, OrderModel>(
         "UPDATE pyme_order SET date=$1, customer=$2, 
             price=$3, paid=$4, notes=$5 
-            WHERE id=$6 RETURNING *")
-        .bind(body.date.unwrap_or(order.date.clone()))
-        .bind(body.customer.unwrap_or(order.customer.clone()))
-        .bind(body.price.unwrap_or(order.price))
-        .bind(body.paid.unwrap_or(order.paid))
-        .bind(body.notes.unwrap_or(order.notes.clone().unwrap_or("".to_string())))
-        .bind(body.id)
-        .fetch_one(&state.db)
-        .await;
-    
+            WHERE id=$6 RETURNING *",
+    )
+    .bind(body.date.unwrap_or(order.date.clone()))
+    .bind(body.customer.unwrap_or(order.customer.clone()))
+    .bind(body.price.unwrap_or(order.price))
+    .bind(body.paid.unwrap_or(order.paid))
+    .bind(
+        body.notes
+            .unwrap_or(order.notes.clone().unwrap_or("".to_string())),
+    )
+    .bind(body.id)
+    .fetch_one(&state.db)
+    .await;
+
     if let Err(e) = query {
         println!("{:?}", e);
         return Err((
@@ -276,43 +286,42 @@ pub async fn update_item(
     if rows_affected == 0 {
         return Err((
             StatusCode::NOT_FOUND,
-            Json(json!({"detail": format!("Item with ID: {} not found", order.id)}))
+            Json(json!({"detail": format!("Item with ID: {} not found", order.id)})),
         ));
     }
 
     let mut items = Vec::<ItemModel>::new();
 
     for i in body.items.unwrap().into_iter() {
-        let query = sqlx::query_as::<_,ItemModel>(
+        let query = sqlx::query_as::<_, ItemModel>(
             "INSERT INTO pyme_order_item (order_id,product,quantity,price) 
-                VALUES ($1, $2, $3, $4) RETURNING *")
-            .bind(order.id)
-            .bind(i.product)
-            .bind(i.quantity)
-            .bind(i.price)
-            .fetch_one(&state.db)
-            .await;
+                VALUES ($1, $2, $3, $4) RETURNING *",
+        )
+        .bind(order.id)
+        .bind(i.product)
+        .bind(i.quantity)
+        .bind(i.price)
+        .fetch_one(&state.db)
+        .await;
         if let Err(e) = query {
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"status": "error","message": format!("{:?}", e)}))
-            ));                    
+                Json(json!({"status": "error","message": format!("{:?}", e)})),
+            ));
         }
         items.push(query.unwrap());
     }
     let mut order = json!(order);
-    order["items"] = json!(items);    
+    order["items"] = json!(items);
     Ok(Json(order))
-
 }
 
 pub async fn delete_item(
-    _claims: Claims, 
-    Path(id): Path<i32>,  
-    State(state): State<Arc<AppState>>
+    _claims: Claims,
+    Path(id): Path<i32>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let query = sqlx::query_as::<_, OrderModel>(
-        "SELECT * FROM pyme_order WHERE id = $1")
+    let query = sqlx::query_as::<_, OrderModel>("SELECT * FROM pyme_order WHERE id = $1")
         .bind(id)
         .fetch_one(&state.db)
         .await;
@@ -320,7 +329,7 @@ pub async fn delete_item(
         println!("{:?}", e);
         return Err((
             StatusCode::NOT_FOUND,
-            Json(json!({"datail": format!("Item with ID: {} not found", id)}))
+            Json(json!({"datail": format!("Item with ID: {} not found", id)})),
         ));
     }
     let order = query.unwrap();
@@ -332,8 +341,8 @@ pub async fn delete_item(
         .rows_affected();
     if rows_affected == 0 {
         return Err((
-            StatusCode::NOT_FOUND, 
-            Json(json!({"detail": format!("Item with ID: {} not found", order.id)}))
+            StatusCode::NOT_FOUND,
+            Json(json!({"detail": format!("Item with ID: {} not found", order.id)})),
         ));
     }
     let rows_affected = sqlx::query("DELETE FROM pyme_order_item WHERE order_id = $1")
@@ -344,37 +353,40 @@ pub async fn delete_item(
         .rows_affected();
     if rows_affected == 0 {
         return Err((
-            StatusCode::NOT_FOUND, 
-            Json(json!({"detail": format!("Items with ID: {} not found", order.id)}))
+            StatusCode::NOT_FOUND,
+            Json(json!({"detail": format!("Items with ID: {} not found", order.id)})),
         ));
     }
     Ok(Json(json!({"result": "ok"})))
 }
 
-
 pub async fn get_customers(
-    _claims: Claims, 
-    params: Option<Query<Params>>, 
-    State(state): State<Arc<AppState>>
+    _claims: Claims,
+    params: Option<Query<Params>>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     //println!("{:?}", params);
     let Query(params) = params.unwrap_or_default();
     println!("{:?}", params);
     let letters = params.q.unwrap_or("".to_string());
-    let query;
 
-    if letters.len() > 0 {
-        query = sqlx::query(r#"
+    let query = if !letters.is_empty() {
+        sqlx::query(
+            r#"
             SELECT DISTINCT customer FROM pyme_order
             WHERE customer ilike $1 
             ORDER BY customer
-            "#).bind(format!("%{}%", letters));
+            "#,
+        )
+        .bind(format!("%{}%", letters))
     } else {
-        query = sqlx::query(r#"
+        sqlx::query(
+            r#"
             SELECT DISTINCT customer FROM pyme_order ORDER BY customer
-            "#);
-    }
-    let query = query.fetch_all(&state.db).await; 
+            "#,
+        )
+    };
+    let query = query.fetch_all(&state.db).await;
 
     match query {
         Ok(records) => {
@@ -382,126 +394,122 @@ pub async fn get_customers(
             for rec in records {
                 customers.push(rec.get(0));
             }
-            Ok(Json(customers))        
-        },
+            Ok(Json(customers))
+        }
         Err(e) => {
             println!("error: {:?}", e);
             let error = serde_json::json!({
                 "detail": "Something bad happened while fetching customers",
             });
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)))
         }
-    } 
+    }
 }
 
 pub async fn get_products(
-    _claims: Claims, 
-    State(state): State<Arc<AppState>>
+    _claims: Claims,
+    State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let query = sqlx::query(r#"
+    let query = sqlx::query(
+        r#"
         select name, cast(price as text) as price from pyme_product order by name
-        "#)
-        .fetch_all(&state.db).await; 
+        "#,
+    )
+    .fetch_all(&state.db)
+    .await;
 
     match query {
         Ok(records) => {
-            let mut rows = Vec::<Vec::<String>>::new();
+            let mut rows = Vec::<Vec<String>>::new();
             for rec in records {
-                let mut r = Vec::<String>::new();
-                r.push(rec.get(0));
-                r.push(rec.get(1));
+                let r = vec![rec.get(0), rec.get(1)];
                 rows.push(r);
             }
-            Ok(Json(rows))        
-        },
+            Ok(Json(rows))
+        }
         Err(e) => {
             println!("error: {:?}", e);
             let error = serde_json::json!({
                 "detail": "Something bad happened while fetching products",
             });
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)))
         }
-    } 
+    }
 }
 
-
-
-
-
-
-
 pub async fn get_stat_customer(
-    _claims: Claims, 
-    State(state): State<Arc<AppState>>
+    _claims: Claims,
+    State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let query = sqlx::query(r#"
+    let query = sqlx::query(
+        r#"
         select customer, cast(sum(quantity) as text), cast(sum(price) as text)
         from public.pyme_order
         group by customer 
         order by sum(price) desc
-        "#)
-        .fetch_all(&state.db).await; 
+        "#,
+    )
+    .fetch_all(&state.db)
+    .await;
 
     match query {
         Ok(records) => {
-            let mut rows = Vec::<Vec::<String>>::new();
+            let mut rows = Vec::<Vec<String>>::new();
             for rec in records {
-                let mut r = Vec::<String>::new();
-                r.push(rec.get(0));
-                r.push(rec.get(1));
-                r.push(rec.get(2));
+                let r = vec![rec.get(0), rec.get(1), rec.get(2)];
                 rows.push(r);
             }
-            Ok(Json(rows))        
-        },
+            Ok(Json(rows))
+        }
         Err(e) => {
             println!("error: {:?}", e);
             let error = serde_json::json!({
                 "detail": "Something bad happened while fetching customers",
             });
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)))
         }
-    } 
+    }
 }
 pub async fn get_stat_product(
-    _claims: Claims, 
-    State(state): State<Arc<AppState>>
+    _claims: Claims,
+    State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let query = sqlx::query(r#"
+    let query = sqlx::query(
+        r#"
         select product, cast(sum(quantity) as text), cast(sum(price) as text) 
         from public.pyme_order
         group by product 
         order by sum(price) desc
-        "#)
-        .fetch_all(&state.db).await; 
+        "#,
+    )
+    .fetch_all(&state.db)
+    .await;
 
     match query {
         Ok(records) => {
-            let mut rows = Vec::<Vec::<String>>::new();
+            let mut rows = Vec::<Vec<String>>::new();
             for rec in records {
-                let mut r = Vec::<String>::new();
-                r.push(rec.get(0));
-                r.push(rec.get(1));
-                r.push(rec.get(2));
+                let r = vec![rec.get(0), rec.get(1), rec.get(2)];
                 rows.push(r);
             }
-            Ok(Json(rows))        
-        },
+            Ok(Json(rows))
+        }
         Err(e) => {
             println!("error: {:?}", e);
             let error = serde_json::json!({
                 "detail": "Something bad happened while fetching customers",
             });
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)))
         }
-    } 
+    }
 }
 
 pub async fn get_stat_year(
-    _claims: Claims, 
-    State(state): State<Arc<AppState>>
+    _claims: Claims,
+    State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let query = sqlx::query(r#"
+    let query = sqlx::query(
+        r#"
         select cast(year as text), cast(sum(quantity) as text), cast(sum(price) as text)
         from (
             select to_date(date, 'YYYY-MM-DD') as date 
@@ -513,34 +521,33 @@ pub async fn get_stat_year(
                 from public.pyme_order
             ) as t
         group by year order by year desc
-        "#)
-        .fetch_all(&state.db).await; 
+        "#,
+    )
+    .fetch_all(&state.db)
+    .await;
 
     match query {
         Ok(records) => {
-            let mut rows = Vec::<Vec::<String>>::new();
+            let mut rows = Vec::<Vec<String>>::new();
             for rec in records {
-                let mut r = Vec::<String>::new();
-                r.push(rec.get(0));
-                r.push(rec.get(1));
-                r.push(rec.get(2));
+                let r = vec![rec.get(0), rec.get(1), rec.get(2)];
                 rows.push(r);
             }
-            Ok(Json(rows))        
-        },
+            Ok(Json(rows))
+        }
         Err(e) => {
             println!("error: {:?}", e);
             let error = serde_json::json!({
                 "detail": "Something bad happened while fetching customers",
             });
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)))
         }
-    } 
+    }
 }
 
 pub async fn get_stat_quarter(
-    _claims: Claims, 
-    State(state): State<Arc<AppState>>
+    _claims: Claims,
+    State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query(r#"
         select cast(quarter as text), cast(sum(quantity) as text), cast(sum(price) as text)
@@ -556,31 +563,23 @@ pub async fn get_stat_quarter(
             ) as t
         group by quarter order by quarter desc
         "#)
-        .fetch_all(&state.db).await; 
+        .fetch_all(&state.db).await;
 
     match query {
         Ok(records) => {
-            let mut rows = Vec::<Vec::<String>>::new();
+            let mut rows = Vec::<Vec<String>>::new();
             for rec in records {
-                let mut r = Vec::<String>::new();
-                r.push(rec.get(0));
-                r.push(rec.get(1));
-                r.push(rec.get(2));
+                let r = vec![rec.get(0), rec.get(1), rec.get(2)];
                 rows.push(r);
             }
-            Ok(Json(rows))        
-        },
+            Ok(Json(rows))
+        }
         Err(e) => {
             println!("error: {:?}", e);
             let error = serde_json::json!({
                 "detail": "Something bad happened while fetching customers",
             });
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)));
+            Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)))
         }
-    } 
+    }
 }
-
-
-
-
-

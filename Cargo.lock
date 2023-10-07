@@ -1643,6 +1643,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
+ "dotenvy",
  "jsonwebtoken",
  "once_cell",
  "serde",
