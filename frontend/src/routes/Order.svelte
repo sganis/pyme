@@ -229,8 +229,7 @@
     }
 </script>
 
-<div class="container">
-
+<div class="container" style="max-width: 500px;">
     <div class="row bg-light border-bottom">
         <div class="col h2">Order:</div>
     </div>
@@ -350,6 +349,7 @@
         </div>
     </div>
 </form>
+
 </div>
 
 

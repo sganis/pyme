@@ -16,10 +16,10 @@
     </thead>
     {#each items as i}
     <tbody>
-        <tr><td>{i[0]}</td>
-            <td class="text-end">{i[1]}</td>
-            <td class="text-end">{i[2]}</td>
-            <td class="text-end">{Math.round(Number(i[2]) /3.75)}</td></tr>
+        <tr><td class="col-70 text-nowrap">{i[0]}</td>
+            <td class="col-10 text-end">{i[1]}</td>
+            <td class="col-10 text-end">{i[2]}</td>
+            <td class="col-10 text-end">{Math.round(Number(i[2]) /3.75)}</td></tr>
     </tbody>
     {/each}
 </table>

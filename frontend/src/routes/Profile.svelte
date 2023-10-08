@@ -41,7 +41,7 @@ import { state, working } from '../lib/store';
     }
 
 </script>
-
+<div class="container">
 <div class="row">
     User: {$state.username}
 </div>
@@ -92,3 +92,4 @@ import { state, working } from '../lib/store';
     <br>
     <Info {info} />
     <Error {error} />
+</div>

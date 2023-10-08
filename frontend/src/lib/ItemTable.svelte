@@ -93,7 +93,7 @@
                     {#if col === 'paid' && o[col] }
                     <td><i class="bi-check2"/></td>
                     {:else}
-                    <td>{ o[col] || ""}</td>
+                    <td class="text-nowrap">{ o[col] || ""}</td>
                     {/if}
                 {/each}
             </tr>    
