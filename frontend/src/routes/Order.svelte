@@ -192,7 +192,7 @@
         let item = order.items[index];
         for (const p of products) {
             if (p[0]===item.product) {                
-                item.price = item.quantity * Number(p[1]);
+                item.price = Number(item.quantity) * Number(p[1]);
                 console.log("price", item.price);
                 order.item = {...item};
                 break;                                
@@ -204,7 +204,7 @@
         console.log('updating total...');
         let sum = 0;
         order.items.forEach( i => {
-            sum += i.price;
+            sum += Number(i.price);
         });
         order.price = sum;
     }
