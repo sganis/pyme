@@ -4,14 +4,14 @@ use sqlx::FromRow;
 
 #[derive(Debug, FromRow, Deserialize, Serialize)]
 #[allow(non_snake_case)]
-pub struct OrderModel {
+pub struct OrderSchema {
     pub id: i32,
     pub date: String,
     pub customer: String,
     pub price: i32,
     pub paid: bool,
     pub notes: String,
-    pub items: sqlx::types::Json<Vec<ItemModel>>,
+    pub items: sqlx::types::Json<Vec<ItemSchema>>,
     pub username: Option<String>,
     pub deleted: Option<bool>,
     pub created: Option<DateTime<Utc>>,
@@ -19,12 +19,10 @@ pub struct OrderModel {
 }
 #[derive(Debug, FromRow, Deserialize, Serialize)]
 #[allow(non_snake_case)]
-pub struct ItemModel {
-    //pub order_id: i32,
+pub struct ItemSchema {
     pub product: String,
     pub quantity: i32,
     pub price: i32,
-    // pub username: Option<String>,
 }
 
 #[derive(Debug, FromRow, Deserialize, Serialize)]
@@ -49,14 +47,7 @@ pub struct Params {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ItemSchema {
-    pub product: String,
-    pub quantity: i32,
-    pub price: i32,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct OrderSchema {
+pub struct UpdateOrderSchema {
     pub id: i32,
     pub date: Option<String>,
     pub customer: Option<String>,

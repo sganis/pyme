@@ -1,6 +1,8 @@
 use crate::{
     auth::{AuthData, AuthError, Claims, KEYS},
-    model::{CountModel, CreateOrderSchema, OrderModel, OrderSchema, Params},
+    schema::{
+        CountModel, CreateOrderSchema, OrderSchema, Params, UpdateOrderSchema,
+    },
     AppState,
 };
 use argon2::{
@@ -211,7 +213,7 @@ pub async fn get_items(
     query.push_bind(limit);
     query.push(" offset ");
     query.push_bind(offset);
-    let query = query.build_query_as::<OrderModel>();
+    let query = query.build_query_as::<OrderSchema>();
     println!("{}", query.sql());
     println!(
         "q={} sortcol={} desc={} limit={} offset={}",
@@ -248,7 +250,7 @@ pub async fn get_item(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     println!("id={}", id);
-    let query = sqlx::query_as::<_, OrderModel>(
+    let query = sqlx::query_as::<_, OrderSchema>(
         "SELECT * FROM pyme_order WHERE id = $1 and deleted=false",
     )
     .bind(id)
@@ -290,7 +292,7 @@ pub async fn create_item(
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateOrderSchema>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let query = sqlx::query_as::<_, OrderModel>(
+    let query = sqlx::query_as::<_, OrderSchema>(
         "INSERT INTO pyme_order (date,customer,price,paid,notes,items,username) 
             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
     )
@@ -352,9 +354,9 @@ pub async fn create_item(
 pub async fn update_item(
     claims: Claims,
     State(state): State<Arc<AppState>>,
-    Json(body): Json<OrderSchema>,
+    Json(body): Json<UpdateOrderSchema>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let query = sqlx::query_as::<_, OrderModel>(
+    let query = sqlx::query_as::<_, OrderSchema>(
         "SELECT * FROM pyme_order WHERE id = $1",
     )
     .bind(body.id)
@@ -373,7 +375,7 @@ pub async fn update_item(
 
     let order = query.unwrap();
 
-    let query = sqlx::query_as::<_, OrderModel>(
+    let query = sqlx::query_as::<_, OrderSchema>(
         "UPDATE pyme_order SET 
             date=$1, customer=$2, price=$3, paid=$4, 
             notes=$5, items=$6, username=$7
@@ -452,7 +454,7 @@ pub async fn delete_item(
     Path(id): Path<i32>,
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let query = sqlx::query_as::<_, OrderModel>(
+    let query = sqlx::query_as::<_, OrderSchema>(
         "SELECT * FROM pyme_order WHERE id = $1",
     )
     .bind(id)

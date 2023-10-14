@@ -1,6 +1,6 @@
 mod auth;
 mod handler;
-mod model;
+mod schema;
 mod route;
 mod test;
 
