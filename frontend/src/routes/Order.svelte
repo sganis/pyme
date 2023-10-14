@@ -99,7 +99,7 @@
         return result;
     }
     const saveOrder = async () => {
-        order.customer = currentCustomer;
+        order.customer = currentCustomer?.toUpperCase() ||'';
         order.price = Number.parseInt(order.price);
 
         for (let item of order.items) {
@@ -155,9 +155,9 @@
             });
             const js = await r.json();
             if (r.status == 200) {
-                //console.log(js);
-                customers = js;
-                return customers;
+                console.log(js);
+                console.log(typeof(js))
+                return JSON.parse(js);
             } 
         }
         catch (err) {
@@ -191,8 +191,8 @@
         console.log('updating price item', index);
         let item = order.items[index];
         for (const p of products) {
-            if (p[0]===item.product) {                
-                item.price = Number(item.quantity) * Number(p[1]);
+            if (p.product===item.product) {                
+                item.price = Number(item.quantity) * Number(p.price);
                 console.log("price", item.price);
                 order.item = {...item};
                 break;                                

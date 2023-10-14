@@ -1,7 +1,6 @@
 use crate::{
     auth::{AuthData, AuthError, Claims, KEYS},
-    model::{CountModel, ItemModel, OrderModel},
-    schema::{CreateOrderSchema, OrderSchema, Params},
+    model::{CountModel, CreateOrderSchema, OrderModel, OrderSchema, Params},
     AppState,
 };
 use argon2::{
@@ -36,9 +35,9 @@ pub async fn token(
     }
 
     let query = sqlx::query(
-        r#"
+        "
         SELECT username,password_hash FROM public.user WHERE username = $1
-        "#,
+        ",
     )
     .bind(authdata.username.clone())
     .fetch_one(&state.db)
@@ -100,9 +99,9 @@ pub async fn password(
     }
 
     let query = sqlx::query(
-        r#"
+        "
         SELECT username,password_hash FROM public.user WHERE username = $1
-        "#,
+        ",
     )
     .bind(authdata.username.clone())
     .fetch_one(&state.db)
@@ -137,10 +136,10 @@ pub async fn password(
             .to_string();
 
         let query = sqlx::query(
-            r#"
+            "
             UPDATE public.user SET password_hash=$1
             WHERE username=$2 returning *
-            "#,
+            ",
         )
         .bind(password_hash.clone())
         .bind(authdata.username.clone())
@@ -171,9 +170,11 @@ pub async fn get_items(
     let limit = params.limit.unwrap_or(10);
     let offset = params.offset.unwrap_or(0);
 
-    let mut query = QueryBuilder::new("SELECT count(*) from pyme_order");
+    let mut query = QueryBuilder::new(
+        "SELECT count(*) from pyme_order where deleted=false",
+    );
     if !q.is_empty() {
-        query.push(" where customer ilike ");
+        query.push(" and customer ilike ");
         query.push_bind(format!("%{}%", q));
     }
     let query_total = query
@@ -193,9 +194,9 @@ pub async fn get_items(
     let total = query_total.unwrap().count;
     println!("total={total}");
 
-    query = QueryBuilder::new("SELECT * from pyme_order");
+    query = QueryBuilder::new("SELECT * from pyme_order where deleted=false");
     if !q.is_empty() {
-        query.push(" where customer ilike ");
+        query.push(" and customer ilike ");
         query.push_bind(format!("%{}%", q));
     }
     query.push(" order by ");
@@ -221,7 +222,7 @@ pub async fn get_items(
 
     match query {
         Ok(items) => {
-            println!("{:?}", items[0]);
+            // println!("{:?}", items[0]);
             Ok(Json(json!({
                 "items" : items,
                 "total" : total,
@@ -248,9 +249,7 @@ pub async fn get_item(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     println!("id={}", id);
     let query = sqlx::query_as::<_, OrderModel>(
-        r#"
-        SELECT * FROM pyme_order WHERE id = $1
-        "#,
+        "SELECT * FROM pyme_order WHERE id = $1 and deleted=false",
     )
     .bind(id)
     .fetch_one(&state.db)
@@ -265,42 +264,43 @@ pub async fn get_item(
     }
 
     let order = query.unwrap();
-    let query = sqlx::query_as::<_, ItemModel>(
-        r#"
-        SELECT * FROM pyme_order_item WHERE order_id = $1
-        "#,
-    )
-    .bind(order.id)
-    .fetch_all(&state.db)
-    .await;
 
-    if let Err(e) = query {
-        println!("error: {:?}", e);
-        let error = json!({
-            "detail": format!("Items for order {} not found", id)
-        });
-        return Err((StatusCode::NOT_FOUND, Json(error)));
-    }
-    let mut order = json!(order);
-    let items = json!(query.unwrap());
-    order["items"] = items;
+    // let query = sqlx::query_as::<_, ItemModel>(
+    //     "SELECT * FROM pyme_order_item WHERE order_id = $1 and deleted=false",
+    // )
+    // .bind(order.id)
+    // .fetch_all(&state.db)
+    // .await;
+
+    // if let Err(e) = query {
+    //     println!("error: {:?}", e);
+    //     let error = json!({
+    //         "detail": format!("Items for order {} not found", id)
+    //     });
+    //     return Err((StatusCode::NOT_FOUND, Json(error)));
+    // }
+    // let mut order = json!(order);
+    // let items = json!(query.unwrap());
+    // order["items"] = items;
     Ok(Json(order))
 }
 
 pub async fn create_item(
-    _claims: Claims,
+    claims: Claims,
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateOrderSchema>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query_as::<_, OrderModel>(
-        "INSERT INTO pyme_order (date,customer,price,paid, notes) 
-            VALUES ($1, $2, $3, $4, $5) RETURNING *",
+        "INSERT INTO pyme_order (date,customer,price,paid,notes,items,username) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
     )
     .bind(body.date.to_string())
     .bind(body.customer.to_string())
     .bind(body.price)
     .bind(body.paid)
     .bind(body.notes)
+    .bind(json!(body.items))
+    .bind(claims.sub.clone())
     .fetch_one(&state.db)
     .await;
 
@@ -321,33 +321,36 @@ pub async fn create_item(
         ));
     }
     let order = query.unwrap();
-    let mut items = Vec::<ItemModel>::new();
+    // let mut items = Vec::<ItemModel>::new();
 
-    for i in body.items.into_iter() {
-        let query = sqlx::query_as::<_, ItemModel>(
-            "INSERT INTO pyme_order_item (order_id,product,quantity,price) 
-                VALUES ($1, $2, $3, $4) RETURNING *",
-        )
-        .bind(order.id)
-        .bind(i.product)
-        .bind(i.quantity)
-        .bind(i.price)
-        .fetch_one(&state.db)
-        .await;
-        if let Err(e) = query {
-            let error =
-                json!({"status": "error","message": format!("{:?}", e)});
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)));
-        }
-        items.push(query.unwrap());
-    }
-    let mut order = json!(order);
-    order["items"] = json!(items);
+    // for i in body.items.into_iter() {
+    //     let query = sqlx::query_as::<_, ItemModel>(
+    //         "INSERT INTO pyme_order_item (order_id,product,quantity,price,username)
+    //             VALUES ($1, $2, $3, $4, $5) RETURNING *",
+    //     )
+    //     .bind(order.id)
+    //     .bind(i.product)
+    //     .bind(i.quantity)
+    //     .bind(i.price)
+    //     .bind(claims.sub.clone())
+    //     .fetch_one(&state.db)
+    //     .await;
+    //     if let Err(e) = query {
+    //         println!("{:?}", e);
+    //         let error =
+    //             json!({"status": "error","message": format!("{:?}", e)});
+    //         return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(error)));
+    //     }
+    //     items.push(query.unwrap());
+    // }
+    // let mut order = json!(order);
+    // order["items"] = json!(items);
+    // //println!("order created: {:?}", order);
     Ok(Json(order))
 }
 
 pub async fn update_item(
-    _claims: Claims,
+    claims: Claims,
     State(state): State<Arc<AppState>>,
     Json(body): Json<OrderSchema>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
@@ -370,21 +373,21 @@ pub async fn update_item(
 
     let order = query.unwrap();
 
-    println!("{:?}", body);
-
     let query = sqlx::query_as::<_, OrderModel>(
-        "UPDATE pyme_order SET date=$1, customer=$2, 
-            price=$3, paid=$4, notes=$5 
-            WHERE id=$6 RETURNING *",
+        "UPDATE pyme_order SET 
+            date=$1, customer=$2, price=$3, paid=$4, 
+            notes=$5, items=$6, username=$7
+            WHERE id=$8 and deleted=false RETURNING *",
     )
     .bind(body.date.unwrap_or(order.date.clone()))
     .bind(body.customer.unwrap_or(order.customer.clone()))
     .bind(body.price.unwrap_or(order.price))
     .bind(body.paid.unwrap_or(order.paid))
-    .bind(
-        body.notes
-            .unwrap_or(order.notes.clone().unwrap_or("".to_string())),
-    )
+    .bind(body.notes.unwrap_or(order.notes.clone()))
+    .bind(json!(body.items.unwrap_or(
+        serde_json::from_value(json!(order.items)).unwrap()
+    )))
+    .bind(claims.sub.clone())
     .bind(body.id)
     .fetch_one(&state.db)
     .await;
@@ -397,51 +400,55 @@ pub async fn update_item(
         ));
     }
 
-    let rows_affected =
-        sqlx::query("DELETE FROM pyme_order_item  WHERE order_id = $1")
-            .bind(order.id)
-            .execute(&state.db)
-            .await
-            .unwrap()
-            .rows_affected();
+    // let rows_affected = sqlx::query(
+    //     "UPDATE pyme_order_item SET deleted=true, username=$1
+    //         WHERE order_id = $2 and deleted=false",
+    // )
+    // .bind(claims.sub.clone())
+    // .bind(order.id)
+    // .execute(&state.db)
+    // .await
+    // .unwrap()
+    // .rows_affected();
 
-    if rows_affected == 0 {
-        return Err((
-            StatusCode::NOT_FOUND,
-            Json(json!({
-                "detail": format!("Item with ID: {} not found", order.id)
-            })),
-        ));
-    }
+    // if rows_affected == 0 {
+    //     return Err((
+    //         StatusCode::NOT_FOUND,
+    //         Json(json!({
+    //             "detail": format!("Item with ID: {} not found", order.id)
+    //         })),
+    //     ));
+    // }
 
-    let mut items = Vec::<ItemModel>::new();
+    // let mut items = Vec::<ItemModel>::new();
 
-    for i in body.items.unwrap().into_iter() {
-        let query = sqlx::query_as::<_, ItemModel>(
-            "INSERT INTO pyme_order_item (order_id,product,quantity,price) 
-                VALUES ($1, $2, $3, $4) RETURNING *",
-        )
-        .bind(order.id)
-        .bind(i.product)
-        .bind(i.quantity)
-        .bind(i.price)
-        .fetch_one(&state.db)
-        .await;
-        if let Err(e) = query {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"status": "error","message": format!("{:?}", e)})),
-            ));
-        }
-        items.push(query.unwrap());
-    }
-    let mut order = json!(order);
-    order["items"] = json!(items);
+    // for i in body.items.unwrap().into_iter() {
+    //     let query = sqlx::query_as::<_, ItemModel>(
+    //         "INSERT INTO pyme_order_item (order_id,product,quantity,price,username)
+    //             VALUES ($1, $2, $3, $4, $5) RETURNING *",
+    //     )
+    //     .bind(order.id)
+    //     .bind(i.product)
+    //     .bind(i.quantity)
+    //     .bind(i.price)
+    //     .bind(claims.sub.clone())
+    //     .fetch_one(&state.db)
+    //     .await;
+    //     if let Err(e) = query {
+    //         return Err((
+    //             StatusCode::INTERNAL_SERVER_ERROR,
+    //             Json(json!({"status": "error","message": format!("{:?}", e)})),
+    //         ));
+    //     }
+    //     items.push(query.unwrap());
+    // }
+    // let mut order = json!(order);
+    // order["items"] = json!(items);
     Ok(Json(order))
 }
 
 pub async fn delete_item(
-    _claims: Claims,
+    claims: Claims,
     Path(id): Path<i32>,
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
@@ -459,12 +466,15 @@ pub async fn delete_item(
         ));
     }
     let order = query.unwrap();
-    let rows_affected = sqlx::query("DELETE FROM pyme_order WHERE id = $1")
-        .bind(order.id)
-        .execute(&state.db)
-        .await
-        .unwrap()
-        .rows_affected();
+    let rows_affected = sqlx::query(
+        "UPDATE pyme_order SET deleted=true, username=$1 WHERE id=$2 and deleted=false",
+    )
+    .bind(claims.sub.clone())
+    .bind(order.id)
+    .execute(&state.db)
+    .await
+    .unwrap()
+    .rows_affected();
     if rows_affected == 0 {
         return Err((
             StatusCode::NOT_FOUND,
@@ -473,21 +483,25 @@ pub async fn delete_item(
             })),
         ));
     }
-    let rows_affected =
-        sqlx::query("DELETE FROM pyme_order_item WHERE order_id = $1")
-            .bind(order.id)
-            .execute(&state.db)
-            .await
-            .unwrap()
-            .rows_affected();
-    if rows_affected == 0 {
-        return Err((
-            StatusCode::NOT_FOUND,
-            Json(json!({
-                "detail": format!("Items with ID: {} not found", order.id)
-            })),
-        ));
-    }
+    // let rows_affected = sqlx::query(
+    //     "UPDATE pyme_order_item
+    //         SET deleted=true, user=$1
+    //         WHERE order_id=$2 and deleted=false",
+    // )
+    // .bind(claims.sub.clone())
+    // .bind(order.id)
+    // .execute(&state.db)
+    // .await
+    // .unwrap()
+    // .rows_affected();
+    // if rows_affected == 0 {
+    //     return Err((
+    //         StatusCode::NOT_FOUND,
+    //         Json(json!({
+    //             "detail": format!("Items with ID: {} not found", order.id)
+    //         })),
+    //     ));
+    // }
     Ok(Json(json!({"result": "ok"})))
 }
 
@@ -503,18 +517,18 @@ pub async fn get_customers(
 
     let query = if !letters.is_empty() {
         sqlx::query(
-            r#"
+            "
             SELECT DISTINCT customer FROM pyme_order
             WHERE customer ilike $1 
             ORDER BY customer
-            "#,
+            ",
         )
         .bind(format!("%{}%", letters))
     } else {
         sqlx::query(
-            r#"
+            "
             SELECT DISTINCT customer FROM pyme_order ORDER BY customer
-            "#,
+            ",
         )
     };
     let query = query.fetch_all(&state.db).await;
@@ -542,21 +556,23 @@ pub async fn get_products(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query(
-        r#"
-        select name, cast(price as text) as price from pyme_product order by name
-        "#,
+        "select cast(value as text) 
+        from pyme_config where key='products'
+        ",
     )
-    .fetch_all(&state.db)
+    .fetch_one(&state.db)
     .await;
 
     match query {
-        Ok(records) => {
-            let mut rows = Vec::<Vec<String>>::new();
-            for rec in records {
-                let r = vec![rec.get(0), rec.get(1)];
-                rows.push(r);
-            }
-            Ok(Json(rows))
+        Ok(record) => {
+            // let mut rows = Vec::<Vec<String>>::new();
+            // for rec in records {
+            //     let r = vec![rec.get(0), rec.get(1)];
+            //     rows.push(r);
+            // }
+            let products: String = record.get(0);
+            // string, converted to json in frontend
+            Ok(Json(products))
         }
         Err(e) => {
             println!("error: {:?}", e);
@@ -574,12 +590,18 @@ pub async fn get_stat_customer(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query(
         r#"
-        select o.customer, cast(sum(i.quantity) as text), 
-        cast(sum(i.price) as text)
-        from public.pyme_order o 
-        inner join public.pyme_order_item i on o.id=i.order_id
-        group by o.customer 
-        order by sum(i.price) desc
+        -- top customer
+        select customer, cast(units as text), cast(price as text) from (
+            select customer
+            ,sum((i->>'quantity')::int) as units
+            ,sum((i->>'price')::int) as price 
+            from (select customer, json_array_elements(items) as i 
+                  from pyme_order 
+                  where not deleted
+                 ) x
+            group by customer
+            order by price desc
+        ) y        
         "#,
     )
     .fetch_all(&state.db)
@@ -609,11 +631,17 @@ pub async fn get_stat_product(
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query(
         r#"
-        select product, cast(sum(quantity) as text), 
-        cast(sum(price) as text)
-        from public.pyme_order_item
-        group by product 
-        order by sum(price) desc
+        -- top product
+        select product, cast(units as text), cast(price as text) from (
+        select i->>'product' as product
+        ,sum((i->>'quantity')::int) as units
+        ,sum((i->>'price')::int) as price
+        from (select json_array_elements(items) as i
+            from pyme_order
+            where not deleted) x
+        group by i->>'product'
+        order by sum((i->>'price')::int) desc
+        ) y
         "#,
     )
     .fetch_all(&state.db)
@@ -643,21 +671,18 @@ pub async fn get_stat_year(
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query(
-        r#"
-        select cast(year as text), cast(sum(quantity) as text), 
-        cast(sum(price) as text)
-        from (
-            select to_date(o.date, 'YYYY-MM-DD') as date 
-                ,extract(year from to_date(o.date, 'YYYY-MM-DD')) as year
-                ,o.customer
-                ,i.product
-                ,i.quantity
-                ,i.price
-                from public.pyme_order o
-                inner join public.pyme_order_item i on o.id=i.order_id
-            ) as t
-        group by year order by year desc
-        "#,
+        "
+        select cast(year as text), cast(units as text), cast(price as text) from (
+            select year
+            ,sum((i->>'quantity')::int) as units
+            ,sum((i->>'price')::int) as price 
+            from (select extract(year from to_date(date, 'YYYY-MM-DD')) as year
+                  ,json_array_elements(items) as i 
+                  from pyme_order where not deleted) x
+            group by year order by year desc
+            ) y
+            
+        ",
     )
     .fetch_all(&state.db)
     .await;
@@ -685,24 +710,21 @@ pub async fn get_stat_quarter(
     _claims: Claims,
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    let query = sqlx::query(r#"
-        select cast(quarter as text), cast(sum(quantity) as text), 
-        cast(sum(price) as text)
-        from (
-            select to_date(o.date, 'YYYY-MM-DD') as date 
-                ,extract(year from to_date(o.date, 'YYYY-MM-DD')) as year
-                ,extract(year from to_date(o.date, 'YYYY-MM-DD')) 
-                    ||'/Q'|| extract(quarter from to_date(o.date, 'YYYY-MM-DD')) 
-                    as quarter
-                ,o.customer
-                ,i.product
-                ,i.quantity
-                ,i.price
-                from public.pyme_order o
-                inner join public.pyme_order_item i on o.id=i.order_id
-            ) as t
+    let query = sqlx::query("
+        -- top quarter
+        select cast(quarter as text), cast(units as text), cast(price as text) from (
+        select quarter
+        ,sum((i->>'quantity')::int) as units
+        ,sum((i->>'price')::int) as price 
+        from (select 
+            extract(year from to_date(date, 'YYYY-MM-DD')) 
+                ||'/Q'|| extract(quarter from to_date(date, 'YYYY-MM-DD')) 
+                as quarter
+            ,json_array_elements(items) as i 
+            from pyme_order where not deleted) x
         group by quarter order by quarter desc
-        "#)
+        ) y
+        ")
         .fetch_all(&state.db).await;
 
     match query {

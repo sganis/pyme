@@ -2,7 +2,6 @@ mod auth;
 mod handler;
 mod model;
 mod route;
-mod schema;
 mod test;
 
 use axum::http::{
@@ -66,7 +65,8 @@ pub async fn axum(
         .allow_credentials(true)
         .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
 
-    let router = create_router(Arc::new(AppState { db: pool.clone() })).layer(cors);
+    let router =
+        create_router(Arc::new(AppState { db: pool.clone() })).layer(cors);
     println!("Server started successfully");
 
     Ok(router.into())

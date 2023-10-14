@@ -6,7 +6,7 @@
 
     export let item = {};
     export let products = [];
-    export let errors = [];
+    //export let errors = [];
     export let hasLabels = true;
     export let index;
 
@@ -37,7 +37,7 @@
             bind:value={item.product}              
             on:change={updatePrice}>    
             {#each products as p}            
-                <option value={p[0]}>{p[0]} ({p[1]})</option>
+                <option value={p.product}>{p.product} ({p.price})</option>
             {/each}
         </select>
         <!-- {#if errors.product}<small class="error">{errors.product}</small>{/if} -->
