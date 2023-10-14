@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
@@ -14,8 +13,6 @@ pub struct OrderSchema {
     pub items: sqlx::types::Json<Vec<ItemSchema>>,
     pub username: Option<String>,
     pub deleted: Option<bool>,
-    pub created: Option<DateTime<Utc>>,
-    pub updated: Option<DateTime<Utc>>,
 }
 #[derive(Debug, FromRow, Deserialize, Serialize)]
 #[allow(non_snake_case)]
