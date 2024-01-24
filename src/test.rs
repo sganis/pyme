@@ -6,7 +6,7 @@ use axum::{
 use serde_json::json;
 
 pub async fn ping() -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    Ok(Json(json!({"ping":"pong!"})))
+    Ok(Json(json!({"result":"pong"})))
 }
 
 fn fib_recursive(n: u32) -> u128 {

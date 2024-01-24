@@ -2,9 +2,12 @@ use axum::http::{request::Parts, StatusCode};
 use axum::{
     async_trait,
     extract::FromRequestParts,
-    headers::{authorization::Bearer, Authorization},
     response::{IntoResponse, Response},
-    Json, RequestPartsExt, TypedHeader,
+    Json, RequestPartsExt, 
+};
+use axum_extra::{
+    headers::{authorization::Bearer, Authorization},
+    TypedHeader,
 };
 use jsonwebtoken::{decode, DecodingKey, EncodingKey, Validation};
 use once_cell::sync::Lazy;

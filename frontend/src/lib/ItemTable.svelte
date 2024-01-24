@@ -87,6 +87,7 @@
                 </tr>
             </thead>
             <tbody>
+            {#if items}
             {#each items as o, i}
             <tr class="clickable" on:click={()=>showModify(o)}>
                 {#each table.columns as col, index}
@@ -98,7 +99,8 @@
                 {/each}
             </tr>    
             {/each} 
-            </tbody>
+            {/if}    
+        </tbody>
         </table>        
     </div>
 </div>

@@ -61,11 +61,13 @@
         error = manager.error;
         result = manager.result;       
     });
+
     const refresh = async () => {
         await manager.search();
         error = manager.error;
         result = manager.result;       
     } 
+    
     const searchLater = async (e) => {
         const searchText = e.detail;
         manager.searchText = searchText

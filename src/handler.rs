@@ -24,6 +24,37 @@ use sqlx::{query_builder::QueryBuilder, Execute};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+
+pub async fn wakeup(
+    State(state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+    let query = sqlx::query(
+        "SELECT username FROM public.user WHERE username = 'san'",
+    )
+    .fetch_one(&state.db)
+    .await;
+
+    if let Err(e) = query {
+        println!("error: {:?}", e);
+        let error = json!({
+            "detail": format!("error: {:?}", e)
+        });
+        return Err((StatusCode::SERVICE_UNAVAILABLE, Json(error)));
+    }
+    let result: String = query.unwrap().get(0);
+    if result != "san" {
+        let error = json!({
+            "detail": "invalid result"
+        });
+        return Err((StatusCode::SERVICE_UNAVAILABLE, Json(error)));
+    }
+    Ok(Json(json!({
+        "result": "ok"
+    })))
+}
+
+
+
 pub async fn token(
     State(state): State<Arc<AppState>>,
     Json(authdata): Json<AuthData>,

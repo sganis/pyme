@@ -1,8 +1,10 @@
 use crate::{
     handler::{
         create_item, delete_item, get_customers, get_item, get_items, get_products,
-        get_stat_customer, get_stat_product, get_stat_quarter, get_stat_year, password, token,
+        get_stat_customer, get_stat_product, get_stat_quarter, get_stat_year, 
+        password, token,
         update_item,
+        wakeup,
     },
     test::{fibi, fibr, ping},
     AppState,
@@ -19,6 +21,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .not_found_service(ServeFile::new("frontend/dist/index.html"));
     Router::new()
         .route("/ping", get(ping))
+        .route("/wakeup", get(wakeup))
         .route("/fibr/:n", get(fibr))
         .route("/fibi/:n", get(fibi))
         .route("/token", post(token))
