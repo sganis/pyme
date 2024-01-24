@@ -1,3 +1,4 @@
+.vscode/
 .svelte-kit
 alembic.ini
 node_modules/
