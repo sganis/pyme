@@ -659,7 +659,7 @@ pub async fn get_stat_customer(
     }
 }
 pub async fn get_stat_product(
-    _claims: Claims,
+    //_claims: Claims,
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     let query = sqlx::query(

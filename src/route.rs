@@ -19,6 +19,8 @@ use tower_http::services::{ServeDir, ServeFile};
 pub fn create_router(state: Arc<AppState>) -> Router {
     let spa = ServeDir::new("frontend/dist")
         .not_found_service(ServeFile::new("frontend/dist/index.html"));
+    let you = ServeDir::new("you/dist")
+        .not_found_service(ServeFile::new("you/dist/index.html"));
     Router::new()
         .route("/ping", get(ping))
         .route("/wakeup", get(wakeup))
@@ -34,6 +36,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/pyme/stat/years/", get(get_stat_year))
         .route("/pyme/stat/quarters/", get(get_stat_quarter))
         .route("/pyme/:id", get(get_item).delete(delete_item))
+        .nest_service("/you", you.clone())
         .nest_service("/", spa.clone())
         .fallback_service(spa)
         .with_state(state)
