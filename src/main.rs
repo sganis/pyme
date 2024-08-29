@@ -28,16 +28,13 @@ pub struct AppState {
 
 #[shuttle_runtime::main]
 pub async fn axum(
-    #[shuttle_secrets::Secrets] secrets: shuttle_secrets::SecretStore,
+    #[shuttle_runtime::Secrets] secrets: shuttle_runtime::SecretStore,
 ) -> shuttle_axum::ShuttleAxum {
     std::env::set_var(
-        "JWT_SECRET",
-        secrets
-            .get("JWT_SECRET")
-            .expect("JWT_SECRET secret is missing"),
+        "JWT_SECRET", secrets .get("JWT_SECRET")
+        .expect("JWT_SECRET secret is missing"),
     );
-    let database_url = secrets
-        .get("DATABASE_URL")
+    let database_url = secrets.get("DATABASE_URL")
         .expect("DATABASE_URL secret is missing");
     std::env::set_var("DATABASE_URL", database_url.clone());
 
