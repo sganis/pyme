@@ -21,6 +21,7 @@ use route::create_router;
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
+use shuttle_runtime::DeploymentMetadata;
 
 pub struct AppState {
     db: Pool<Postgres>,
@@ -29,6 +30,7 @@ pub struct AppState {
 #[shuttle_runtime::main]
 pub async fn axum(
     #[shuttle_runtime::Secrets] secrets: shuttle_runtime::SecretStore,
+    #[shuttle_runtime::Metadata] metadata: DeploymentMetadata,
 ) -> shuttle_axum::ShuttleAxum {
     std::env::set_var(
         "JWT_SECRET", secrets .get("JWT_SECRET")
@@ -62,8 +64,10 @@ pub async fn axum(
         .allow_credentials(true)
         .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
 
-    let router =
-        create_router(Arc::new(AppState { db: pool.clone() })).layer(cors);
+    let router = create_router(Arc::new(AppState { db: pool.clone() }))
+        .layer(cors)
+        .route("/metadata", axum::routing::get(format!("{:?}", metadata)));
+
     println!("Server started successfully");
 
     Ok(router.into())
