@@ -1,4 +1,0 @@
-# tells the builder to copy the "static" folder in the root of the workspace to the final build image 
-build_assets = [
-  "frontend/dist",
-]
