@@ -1,7 +1,7 @@
 workspace = { members = ["you"] }
 [package]
 name = "pyme"
-version = "1.0.22"
+version = "1.0.23"
 edition = "2021"
 
 [dependencies]
