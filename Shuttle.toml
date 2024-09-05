@@ -1,0 +1,4 @@
+# needed in beta 
+build_assets = [
+  "frontend/dist",
+]
