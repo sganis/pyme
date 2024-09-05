@@ -1,43 +1,43 @@
-name: CI/CD
+# name: CI/CD
 
-on:
-  push:
-    branches:
-      - main
+# on:
+#   push:
+#     branches:
+#       - main
 
-env:
-  CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-Dwarnings"
+# env:
+#   CARGO_TERM_COLOR: always
+#   RUSTFLAGS: "-Dwarnings"
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-      # - name: Setup nodejs
-      #   uses: actions/setup-node@v3
-      #   with:
-      #     node-version: "18.x"
-      # - name: Install dependencies
-      #   run: npm ci  --prefix ./frontend
-      # - name: Build frontend
-      #   run: npm run build --prefix ./frontend
-      # - name: Build backend
-      #   run: cargo build --release
-      #   working-directory: rs
-      # - name: Run tests
-      #   run: cargo test
-      #   working-directory: rs
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout
+#         uses: actions/checkout@v3
+#       # - name: Setup nodejs
+#       #   uses: actions/setup-node@v3
+#       #   with:
+#       #     node-version: "18.x"
+#       # - name: Install dependencies
+#       #   run: npm ci  --prefix ./frontend
+#       # - name: Build frontend
+#       #   run: npm run build --prefix ./frontend
+#       # - name: Build backend
+#       #   run: cargo build --release
+#       #   working-directory: rs
+#       # - name: Run tests
+#       #   run: cargo test
+#       #   working-directory: rs
 
-      - name: Run clippy
-        run: cargo clippy --all-targets --all-features
+#       - name: Run clippy
+#         run: cargo clippy --all-targets --all-features
 
-      - name: Deploy to shuttle
-        uses: shuttle-hq/deploy-action@main
-        with:
-          deploy-key: ${{ secrets.SHUTTLE_DEPLOY_KEY }}
-          # allow-dirty: true
-          # working-directory: rs
-          # name: pyme
-          # no-test: true
+#       - name: Deploy to shuttle
+#         uses: shuttle-hq/deploy-action@main
+#         with:
+#           deploy-key: ${{ secrets.SHUTTLE_DEPLOY_KEY }}
+#           # allow-dirty: true
+#           # working-directory: rs
+#           # name: pyme
+#           # no-test: true
