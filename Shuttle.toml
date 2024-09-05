@@ -1,4 +1,5 @@
 # needed in beta 
-build_assets = [
-  "frontend/dist",
-]
+# build_assets = [
+#   "frontend/dist",
+#   "you/dist",
+# ]
