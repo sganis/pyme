@@ -1,5 +1,5 @@
 # needed in beta 
 build_assets = [
-  "frontend/dist",
-  "you/dist",
+  "frontend",
+  "you",
 ]
