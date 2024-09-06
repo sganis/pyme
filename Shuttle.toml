@@ -3,5 +3,3 @@ build_assets = [
   "frontend/dist",
   "you/dist",
 ]
-
-
